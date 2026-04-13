@@ -92,6 +92,14 @@
     	<artifactId>weblaf-ui</artifactId>
     	<version>1.28</version>
     </dependency>
+    <!-- LatDraw -->
+<dependency>
+    <groupId>latdraw</groupId>
+    <artifactId>latdraw</artifactId>
+    <version>2.0</version>
+    <scope>system</scope>
+    <systemPath>${project.basedir}/libs/LatDraw.jar</systemPath>
+</dependency>
   </dependencies>
 
   <build>
