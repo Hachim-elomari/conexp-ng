@@ -1188,7 +1188,7 @@ public class ContextEditor extends View {
 
             // (F1) ✅ IMPLÉMENTATION : Générer le treillis pour ce groupe
             state.setCurrentGroupIdForLattice(group.getGroupId());
-            state.latticeChanged();
+            state.contextChanged();
             
             JOptionPane.showMessageDialog(
                 ContextEditor.this,

@@ -24,6 +24,9 @@ import fcatools.conexpng.model.FormalContext;
 /**
  * This class computes the lattice graph. It contains the available algorithms
  * for lattice layout and provides methods to change the default.
+ * 
+ * (F1) MODIFIÉ pour Fonctionnalité 1 : Groupes d'Attributs
+ * VERSION FINALE : Utilise getConceptsForGroup() de FormalContext
  */
 public class LatticeGraphComputer {
 
@@ -34,14 +37,10 @@ public class LatticeGraphComputer {
     private static int screenWidth;
     private static int screenHeight;
 
-    // (F1) NOUVEAU CHAMP pour Fonctionnalité 1 : Groupes d'Attributs
-    // Stocke l'ID du groupe actuellement sélectionné pour la génération du treillis
-    // Si null → générer le treillis pour TOUS les attributs (comportement normal)
-    // Si non-null → générer le treillis SEULEMENT pour les attributs du groupe spécifié
+    // (F1) NOUVEAU CHAMP pour stocker l'ID du groupe sélectionné
     private static String currentGroupIdForLattice = null;
 
-    // (F1) NOUVEAU CHAMP pour accéder au contexte depuis les méthodes statiques
-    // Nécessaire pour accéder à getAttributesInGroup() de FormalContext
+    // (F1) NOUVEAU CHAMP pour accéder au contexte
     private static Conf currentConf = null;
 
     /**
@@ -69,14 +68,12 @@ public class LatticeGraphComputer {
         }
     }
 
-    // (F1) NOUVELLES MÉTHODES pour Fonctionnalité 1 : Groupes d'Attributs
-    // Ces méthodes permettent de définir quel groupe générer et de le récupérer
+    // ═════════════════════════════════════════════════════════════════════════
+    // (F1) MÉTHODES PUBLIQUES pour Fonctionnalité 1
+    // ═════════════════════════════════════════════════════════════════════════
 
     /**
      * (F1) Définir l'ID du groupe pour lequel générer le treillis
-     * 
-     * Utilisé par GenerateLatticeForGroupAction pour dire au LatticeGraphComputer
-     * quel groupe spécifique générer.
      * 
      * @param groupId ID du groupe (ou null pour générer pour tous les attributs)
      */
@@ -87,7 +84,7 @@ public class LatticeGraphComputer {
     /**
      * (F1) Récupérer l'ID du groupe actuellement défini
      * 
-     * @return ID du groupe ou null si génération pour tous les attributs
+     * @return ID du groupe ou null
      */
     public static String getGroupIdForLattice() {
         return currentGroupIdForLattice;
@@ -95,7 +92,6 @@ public class LatticeGraphComputer {
 
     /**
      * (F1) Définir la configuration (Conf) pour accéder au contexte
-     * Nécessaire pour que filterConceptsByGroup() puisse accéder au contexte
      * 
      * @param conf La configuration contenant le FormalContext
      */
@@ -106,8 +102,8 @@ public class LatticeGraphComputer {
     /**
      * This method computes the lattice graph.
      * 
-     * (F1) MODIFIÉ pour Fonctionnalité 1 : Support des groupes d'attributs
-     * Si currentGroupIdForLattice != null, filtre les concepts pour ce groupe uniquement
+     * (F1) MODIFIÉ : Si un groupe est sélectionné, utilise getConceptsForGroup()
+     * pour obtenir les concepts filtrés
      * 
      * @param concepts
      *            set of concepts of the lattice.
@@ -117,9 +113,34 @@ public class LatticeGraphComputer {
      */
     public static LatticeGraph computeLatticeGraph(Set<Concept<String, FullObject<String, String>>> concepts,
             Rectangle bounds) {
-        // (F1) Si un groupe est sélectionné, filtrer les concepts pour ce groupe uniquement
-        if (currentGroupIdForLattice != null && currentConf != null) {
-            lattConcepts = filterConceptsByGroup(concepts, currentGroupIdForLattice);
+        
+        // (F1) ✅ Utiliser le groupe défini dans Conf
+        if (currentConf != null) {
+            String groupId = currentConf.getCurrentGroupIdForLattice();
+            
+            if (groupId != null) {
+                try {
+                    System.out.println("[F1] DEBUG: Groupe détecté = " + groupId);
+                    
+                    // ✅ Créer un contexte réduit avec SEULEMENT les attributs du groupe
+                    FormalContext filteredContext = createFilteredContextForGroup(
+                        currentConf.context, groupId);
+                    
+                    // ✅ Régénérer les concepts à partir du contexte réduit
+                    Set<Concept<String, FullObject<String, String>>> filteredConcepts = 
+                        filteredContext.getConceptsWithoutConsideredElements();
+                    
+                    lattConcepts = filteredConcepts;
+                    System.out.println("[F1] ✅ Concepts filtrés : " + filteredConcepts.size() + 
+                                     " (vs " + concepts.size() + " complets)");
+                } catch (Exception e) {
+                    System.err.println("[F1] ❌ Erreur : " + e.getMessage());
+                    e.printStackTrace();
+                    lattConcepts = concepts;
+                }
+            } else {
+                lattConcepts = concepts;
+            }
         } else {
             lattConcepts = concepts;
         }
@@ -132,6 +153,59 @@ public class LatticeGraphComputer {
         graph = usedAlgorithm.computeLatticeGraphPositions(graph, screenWidth, screenHeight);
         return graph;
     }
+    
+    
+    /**
+     * (F1) Créer un contexte réduit avec SEULEMENT les attributs du groupe
+     */
+    private static FormalContext createFilteredContextForGroup(
+            FormalContext originalContext, String groupId) throws Exception {
+        
+        // Récupérer les attributs du groupe
+        java.util.List<String> groupAttrsList = originalContext.getAttributesInGroup(groupId);
+        
+        if (groupAttrsList == null || groupAttrsList.isEmpty()) {
+            System.out.println("[F1] Groupe vide");
+            return originalContext;
+        }
+        
+        java.util.Set<String> groupAttrs = new TreeSet<>(groupAttrsList);
+        System.out.println("[F1] Création contexte réduit avec " + groupAttrs.size() + " attributs : " + groupAttrs);
+        
+        // Créer nouveau contexte
+        FormalContext filtered = new FormalContext();
+        
+        // ✅ ÉTAPE 1 : Ajouter les attributs du groupe
+        for (String attr : groupAttrs) {
+            filtered.addAttribute(attr);
+        }
+        
+        // ✅ ÉTAPE 2 : Créer des NOUVEAUX objets avec SEULEMENT les attributs du groupe
+        for (int i = 0; i < originalContext.getObjectCount(); i++) {
+            FullObject<String, String> originalObj = originalContext.getObjectAtIndex(i);
+            
+            // Créer un nouvel objet avec les attributs filtrés
+            java.util.Set<String> filteredAttrs = new TreeSet<>();
+            for (String attr : originalObj.getDescription().getAttributes()) {
+                if (groupAttrs.contains(attr)) {
+                    filteredAttrs.add(attr);
+                }
+            }
+            
+            // Créer le nouvel objet avec ces attributs filtrés
+            FullObject<String, String> newObj = 
+                new FullObject<>(originalObj.getIdentifier(), filteredAttrs);
+            
+            filtered.addObject(newObj);
+        }
+        
+        System.out.println("[F1] Contexte réduit créé : " + filtered.getObjectCount() + 
+                         " objets, " + filtered.getAttributeCount() + " attributs");
+        
+        return filtered;
+    }
+    
+    
 
     /**
      * Initialize the graph.
@@ -288,121 +362,11 @@ public class LatticeGraphComputer {
         }
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
-    // (F1) NOUVELLES MÉTHODES HELPER pour Fonctionnalité 1 : Groupes d'Attributs
-    // ═════════════════════════════════════════════════════════════════════════
-
     /**
-     * (F1) Filtrer les concepts pour un groupe spécifique
-     * 
-     * Cette méthode prend l'ensemble de tous les concepts et ne garde que ceux
-     * dont les attributs (intent) appartiennent au groupe spécifié.
-     * 
-     * Exemple :
-     * - Contexte original : 10 attributs → 1024 concepts possibles
-     * - Groupe "Conditions Météo" : 3 attributs (Chaleur, Pluie, Humidité)
-     * - Résultat : Seulement les concepts contenant SEULEMENT ces 3 attributs
-     * - Nombre de concepts réduits : max 2^3 = 8 concepts
-     * 
-     * Cela rend l'analyse plus simple en se concentrant sur une famille d'attributs liés
-     * 
-     * @param allConcepts Tous les concepts du contexte original
-     * @param groupId ID du groupe pour filtrer
-     * @return Ensemble des concepts filtrés pour ce groupe
-     */
-    private static Set<Concept<String, FullObject<String, String>>> filterConceptsByGroup(
-            Set<Concept<String, FullObject<String, String>>> allConcepts,
-            String groupId) {
-
-        Set<Concept<String, FullObject<String, String>>> filteredConcepts = new TreeSet<>();
-
-        // (F1) Récupérer les attributs du groupe depuis le contexte actuel
-        // ✅ COMPLÉTÉ : Accès au FormalContext via Conf
-        Set<String> groupAttributes = getAttributesInGroup(groupId);
-
-        if (groupAttributes.isEmpty()) {
-            // Si le groupe n'a pas d'attributs ou n'existe pas, retourner tous les concepts
-            return allConcepts;
-        }
-
-        // Parcourir tous les concepts et ne garder que ceux dont les attributs
-        // font partie du groupe
-        for (Concept<String, FullObject<String, String>> concept : allConcepts) {
-            Set<String> conceptAttributes = concept.getIntent();
-
-            // Vérifier si TOUS les attributs du concept appartiennent au groupe
-            boolean allAttributesInGroup = true;
-            for (String attr : conceptAttributes) {
-                if (!groupAttributes.contains(attr)) {
-                    allAttributesInGroup = false;
-                    break;
-                }
-            }
-
-            // Si tous les attributs du concept font partie du groupe, le garder
-            if (allAttributesInGroup) {
-                filteredConcepts.add(concept);
-            }
-        }
-
-        return filteredConcepts;
-    }
-
-    /**
-     * (F1) Générer le treillis pour un groupe spécifique
-     * 
-     * Encapsulation pratique pour :
-     * 1. Définir le groupe à générer
-     * 2. Déclencher le recalcul du treillis
-     * 
-     * Utilisé par GenerateLatticeForGroupAction
-     * 
-     * @param groupId ID du groupe pour lequel générer le treillis
-     */
-    public static void computeLatticeGraphForGroup(String groupId) {
-        currentGroupIdForLattice = groupId;
-        // Note: L'appel réel à computeLatticeGraph() se fera depuis le contrôleur
-        // qui appellera state.latticeChanged() pour déclencher la mise à jour
-    }
-
-    /**
-     * (F1) Récupérer les attributs d'un groupe
-     * 
-     * Utilitaire pour obtenir la liste des attributs appartenant à un groupe.
-     * Utilisé par filterConceptsByGroup() pour savoir quels attributs faire
-     * correspondre lors du filtrage.
-     * 
-     * ✅ COMPLÉTÉ : Accès au contexte via Conf pour récupérer les attributs
-     * 
-     * @param groupId ID du groupe
-     * @return Set d'attributs appartenant au groupe
-     */
-    public static Set<String> getAttributesInGroup(String groupId) {
-        // (F1) ✅ COMPLÉTÉ : Implémenter en accédant au contexte global
-        if (currentConf == null || currentConf.context == null) {
-            return new TreeSet<>();  // Retourner un ensemble vide si le contexte n'est pas disponible
-        }
-
-        // ✅ Accéder au FormalContext pour récupérer les attributs du groupe
-        FormalContext context = currentConf.context;
-        
-        // Appeler la méthode getAttributesInGroup() qui existe maintenant dans FormalContext
-        java.util.List<String> groupAttributesList = context.getAttributesInGroup(groupId);
-        
-        if (groupAttributesList != null && !groupAttributesList.isEmpty()) {
-            return new TreeSet<>(groupAttributesList);
-        } else {
-            return new TreeSet<>();
-        }
-    }
-
-    /**
-     * (F1) Réinitialiser le groupe sélectionné
-     * 
-     * Revenir au mode normal (tous les attributs).
-     * Utile quand l'utilisateur veut basculer entre "treillis du groupe" et "treillis complet"
+     * (F1) Réinitialiser le filtre de groupe
      */
     public static void clearGroupFilter() {
         currentGroupIdForLattice = null;
+        System.out.println("[F1] Filtre de groupe supprimé - retour au treillis complet");
     }
 }
