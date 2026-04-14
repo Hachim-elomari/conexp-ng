@@ -18,7 +18,8 @@ import de.tudresden.inf.tcs.fcalib.FullObject;
 import de.tudresden.inf.tcs.fcalib.Implication;
 import de.tudresden.inf.tcs.fcalib.ImplicationSet;
 import de.tudresden.inf.tcs.fcalib.utils.ListSet;
-
+import de.tudresden.inf.tcs.fcalib.utils.ListSet;
+import de.tudresden.inf.tcs.fcaapi.utils.IndexedSet;
 /**
  * A specialization of FormalContext<String,String> with the aim to remove the
  * verbose repetition of <String,String>. Plus, adds a couple of useful methods.
@@ -867,4 +868,67 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
         return attributeGroupManager.getGroupCount();
     }   
     
+    /**
+     * (F1) ÉTAPE 2 : Réorganiser les attributs pour mettre les groupes ensemble
+     * 
+     * Après création d'un groupe, cette méthode déplace les attributs du groupe
+     * pour qu'ils soient côte à côte (facilite l'affichage matriciel)
+     * 
+     * Exemple :
+     * Avant : [female, adult, juvenile, male]
+     * Groupes : gender(female,male), age(adult,juvenile)
+     * Après : [female, male, adult, juvenile]
+     */
+    public void reorganizeAttributesForGroups() {
+        try {
+            java.util.List<String> newOrder = new java.util.ArrayList<>();
+            java.util.Set<String> processed = new java.util.HashSet<>();
+            
+            // Parcourir les groupes et ajouter leurs attributs ensemble
+            for (AttributeGroup group : attributeGroupManager.getAllGroups()) {
+                for (String attr : group.getAttributeNames()) {
+                    if (!processed.contains(attr)) {
+                        newOrder.add(attr);
+                        processed.add(attr);
+                    }
+                }
+            }
+            
+            // Ajouter les attributs non groupés à la fin
+            for (String attr : getAttributes()) {
+                if (!processed.contains(attr)) {
+                    newOrder.add(attr);
+                }
+            }
+            
+            // Réorganiser les attributs dans le contexte
+            reorderAttributes(newOrder);
+            
+            System.out.println("[F1] Attributs réorganisés : " + newOrder);
+            
+        } catch (Exception e) {
+            System.err.println("[F1] Erreur réorganisation : " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * (F1) Helper : Réorganiser les attributs selon un nouvel ordre
+     */
+    private void reorderAttributes(java.util.List<String> newOrder) {
+        IndexedSet<String> newAttributes = new ListSet<>();
+        
+        // Ajouter dans le nouvel ordre
+        for (String attr : newOrder) {
+            if (getAttributes().contains(attr)) {
+                newAttributes.add(attr);
+            }
+        }
+        
+        // Remplacer les attributs
+        getAttributes().clear();
+        for (String attr : newAttributes) {
+            getAttributes().add(attr);
+        }
+    }
 }

@@ -1067,13 +1067,13 @@ public class ContextEditor extends View {
                 return;
             }
 
+            // (F1) ✅ ÉTAPE 1 : Accepter N'IMPORTE QUELLES colonnes (pas juste contiguës)
             java.util.Set<String> selectedAttrs = new java.util.HashSet<>();
-            int startCol = Math.min(matrix.getLastSelectedColumnsStartIndex(), 
-                                   matrix.getLastSelectedColumnsEndIndex());
-            int endCol = Math.max(matrix.getLastSelectedColumnsStartIndex(), 
-                                 matrix.getLastSelectedColumnsEndIndex());
-
-            for (int j = startCol; j <= endCol; j++) {
+            
+            // Récupérer TOUTES les colonnes sélectionnées (peu importe l'ordre)
+            int[] selectedCols = matrix.getSelectedColumns();
+            
+            for (int j : selectedCols) {
                 if (j > 0 && j <= state.context.getAttributeCount()) {
                     selectedAttrs.add(state.context.getAttributeAtIndex(j - 1));
                 }
@@ -1092,7 +1092,11 @@ public class ContextEditor extends View {
             if (groupName != null && !groupName.isEmpty()) {
                 state.saveConf();
                 String groupId = state.context.createAttributeGroup(groupName, selectedAttrs);
+                
                 if (groupId != null) {
+                    // (F1) ✅ ÉTAPE 2 : Réorganiser les attributs après groupage
+                    state.context.reorganizeAttributesForGroups();
+                    
                     matrixModel.fireTableStructureChanged();
                     matrix.invalidate();
                     matrix.repaint();
