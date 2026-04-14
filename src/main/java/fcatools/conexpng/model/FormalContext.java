@@ -881,6 +881,14 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
      */
     public void reorganizeAttributesForGroups() {
         try {
+            System.out.println("[F1-DEBUG] Nombre de groupes : " + attributeGroupManager.getGroupCount());
+            
+            // Afficher chaque groupe et ses attributs
+            for (AttributeGroup group : attributeGroupManager.getAllGroups()) {
+                System.out.println("[F1-DEBUG] Groupe '" + group.getGroupName() + 
+                                 "' contient : " + group.getAttributeNames());
+            }
+            
             java.util.List<String> newOrder = new java.util.ArrayList<>();
             java.util.Set<String> processed = new java.util.HashSet<>();
             
@@ -890,6 +898,7 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
                     if (!processed.contains(attr)) {
                         newOrder.add(attr);
                         processed.add(attr);
+                        System.out.println("[F1-DEBUG] Ajout à newOrder : " + attr);
                     }
                 }
             }
@@ -898,13 +907,14 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
             for (String attr : getAttributes()) {
                 if (!processed.contains(attr)) {
                     newOrder.add(attr);
+                    System.out.println("[F1-DEBUG] Attr non groupé : " + attr);
                 }
             }
             
+            System.out.println("[F1-DEBUG] Nouvel ordre final : " + newOrder);
+            
             // Réorganiser les attributs dans le contexte
             reorderAttributes(newOrder);
-            
-            System.out.println("[F1] Attributs réorganisés : " + newOrder);
             
         } catch (Exception e) {
             System.err.println("[F1] Erreur réorganisation : " + e.getMessage());

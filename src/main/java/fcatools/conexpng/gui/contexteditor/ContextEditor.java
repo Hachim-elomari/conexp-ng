@@ -1063,23 +1063,36 @@ public class ContextEditor extends View {
 
     class GroupSelectedAttributesAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
-            if (matrix.isRenaming || matrix.getSelectedColumnCount() < 2) {
+            // (F1) ✅ Demander directement le NOM des attributs à grouper
+            String attrInput = JOptionPane.showInputDialog(
+                ContextEditor.this,
+                "Enter attribute names to group (comma-separated):\n" +
+                "Available: " + state.context.getAttributes().toString(),
+                "Group Attributes",
+                JOptionPane.QUESTION_MESSAGE);
+
+            if (attrInput == null || attrInput.trim().isEmpty()) {
                 return;
             }
 
-            // (F1) ✅ ÉTAPE 1 : Accepter N'IMPORTE QUELLES colonnes (pas juste contiguës)
+            // Parser les attributs saisis
             java.util.Set<String> selectedAttrs = new java.util.HashSet<>();
+            String[] parts = attrInput.split(",");
             
-            // Récupérer TOUTES les colonnes sélectionnées (peu importe l'ordre)
-            int[] selectedCols = matrix.getSelectedColumns();
-            
-            for (int j : selectedCols) {
-                if (j > 0 && j <= state.context.getAttributeCount()) {
-                    selectedAttrs.add(state.context.getAttributeAtIndex(j - 1));
+            for (String part : parts) {
+                String attr = part.trim();
+                if (state.context.getAttributes().contains(attr)) {
+                    selectedAttrs.add(attr);
+                    System.out.println("[F1] Attribut trouvé : " + attr);
+                } else {
+                    System.out.println("[F1] ❌ Attribut INEXISTANT : " + attr);
                 }
             }
 
             if (selectedAttrs.isEmpty()) {
+                JOptionPane.showMessageDialog(ContextEditor.this, 
+                    "❌ Aucun attribut valide trouvé !", 
+                    "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
@@ -1094,9 +1107,7 @@ public class ContextEditor extends View {
                 String groupId = state.context.createAttributeGroup(groupName, selectedAttrs);
                 
                 if (groupId != null) {
-                    // (F1) ✅ ÉTAPE 2 : Réorganiser les attributs après groupage
                     state.context.reorganizeAttributesForGroups();
-                    
                     matrixModel.fireTableStructureChanged();
                     matrix.invalidate();
                     matrix.repaint();
