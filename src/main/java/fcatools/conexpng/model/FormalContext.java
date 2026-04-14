@@ -1,4 +1,5 @@
 package fcatools.conexpng.model;
+import fcatools.conexpng.model.AttributeGroupManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,12 +25,17 @@ import de.tudresden.inf.tcs.fcalib.utils.ListSet;
  * Due to the API of FormalContext<String,String> the here implemented methods
  * are extremely inefficient.
  */
+
+
 public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<String, String> {
 
     protected HashMap<String, SortedSet<String>> objectsOfAttribute = new HashMap<>();
     private ArrayList<String> dontConsideredAttr = new ArrayList<>();
     private ArrayList<FullObject<String, String>> dontConsideredObj = new ArrayList<>();
 
+    // NOUVEAU pour la fonctionnalité (F1): Groupes d'Attributs
+    private AttributeGroupManager attributeGroupManager;
+    
     @Override
     public boolean addAttribute(String attribute) throws IllegalAttributeException {
         if (super.addAttribute(attribute)) {
@@ -92,11 +98,16 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
     public FormalContext() {
         super();
         objectsOfAttribute = new HashMap<>();
+        // F1 : Initialiser le gestionnaire de groupes
+        this.attributeGroupManager = new AttributeGroupManager(this);
     }
 
     public FormalContext(int objectsCount, int attributesCount) {
         super();
         objectsOfAttribute = new HashMap<>();
+        // F1 : Initialiser le gestionnaire de groupes
+        this.attributeGroupManager = new AttributeGroupManager(this);
+        
         for (int i = 0; i < attributesCount; i++) {
             addAttribute("attr" + i);
         }
@@ -730,4 +741,130 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
         return dontConsideredObj;
     }
 
+ // ═════════════════════════════════════════════════════════════
+    // FONCTIONNALITÉ 1: GROUPES D'ATTRIBUTS
+    // ═════════════════════════════════════════════════════════════
+ 
+    /**
+     * Get the attribute group manager
+     */
+    public AttributeGroupManager getAttributeGroupManager() {
+        return attributeGroupManager;
+    }
+ 
+    /**
+     * Create a new attribute group with the given name and attributes
+     * @param groupName Name for the group (e.g., "Conditions Météo")
+     * @param attributeNames Set of attribute names to add to the group
+     * @return The generated group ID (e.g., "group_0")
+     */
+    public String createAttributeGroup(String groupName, java.util.Set<String> attributeNames) {
+        String groupId = attributeGroupManager.createGroup(groupName);
+        if (groupId == null) {
+            return null;
+        }
+        for (String attr : attributeNames) {
+            attributeGroupManager.addAttributeToGroup(groupId, attr);
+        }
+        return groupId;
+    }
+ 
+    /**
+     * Remove an attribute group (ungroups its attributes)
+     */
+    public boolean removeAttributeGroup(String groupId) {
+        return attributeGroupManager.removeGroup(groupId);
+    }
+ 
+    /**
+     * Get all attributes belonging to a specific group
+     */
+    public java.util.List<String> getAttributesInGroup(String groupId) {
+        AttributeGroup group = attributeGroupManager.getGroup(groupId);
+        if (group == null) {
+            return new java.util.ArrayList<>();
+        }
+        return group.getAttributeNames();
+    }
+ 
+    /**
+     * Check if an attribute is in any group
+     */
+    public boolean isAttributeInGroup(String attributeName) {
+        return attributeGroupManager.isAttributeGrouped(attributeName);
+    }
+ 
+    /**
+     * Get the group containing a specific attribute
+     */
+    public AttributeGroup getGroupForAttribute(String attributeName) {
+        return attributeGroupManager.getGroupForAttribute(attributeName);
+    }
+ 
+    /**
+     * Get the group name for an attribute (null if attribute is not grouped)
+     */
+    public String getGroupNameForAttribute(String attributeName) {
+        AttributeGroup group = getGroupForAttribute(attributeName);
+        return group != null ? group.getGroupName() : null;
+    }
+ 
+    /**
+     * Get all groups
+     */
+    public java.util.Collection<AttributeGroup> getAllAttributeGroups() {
+        return attributeGroupManager.getAllGroups();
+    }
+ 
+    /**
+     * Generate concepts for a specific attribute group
+     * This method filters the concepts to only include attributes from the specified group
+     * 
+     * @param groupId The group ID
+     * @return A set of concepts considering only attributes in the group
+     */
+    public Set<Concept<String, FullObject<String, String>>> getConceptsForGroup(String groupId) {
+        AttributeGroup group = attributeGroupManager.getGroup(groupId);
+        if (group == null) {
+            return new java.util.HashSet<>();
+        }
+ 
+        // Get all concepts first
+        Set<Concept<String, FullObject<String, String>>> allConcepts = getConcepts();
+ 
+        // Filter concepts to only include attributes from this group
+        Set<Concept<String, FullObject<String, String>>> filteredConcepts = new java.util.HashSet<>();
+        
+        for (Concept<String, FullObject<String, String>> concept : allConcepts) {
+            // Create a new concept with only the attributes from the group
+            LatticeConcept filtered = new LatticeConcept();
+            filtered.getExtent().addAll(concept.getExtent());
+            
+            // Only add attributes that belong to this group
+            for (String attr : concept.getIntent()) {
+                if (group.containsAttribute(attr)) {
+                    filtered.getIntent().add(attr);
+                }
+            }
+            
+            filteredConcepts.add(filtered);
+        }
+ 
+        return filteredConcepts;
+    }
+ 
+    /**
+     * Get attributes that are NOT in any group
+     */
+    public java.util.Collection<String> getUngroupedAttributes() {
+        return attributeGroupManager.getUngroupedAttributes();
+    }
+ 
+    /**
+     * Get the number of attribute groups
+     */
+    public int getAttributeGroupCount() {
+        return attributeGroupManager.getGroupCount();
+    }   
+    
 }

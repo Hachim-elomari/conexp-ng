@@ -50,6 +50,12 @@ public class Conf {
 
     private PropertyChangeSupport propertyChangeSupport;
 
+    // (F1) NOUVEAU CHAMP pour Fonctionnalité 1 : Groupes d'Attributs
+    // Stocke l'ID du groupe actuellement sélectionné pour la génération du treillis
+    // Si null → générer le treillis pour TOUS les attributs (comportement normal)
+    // Si non-null (ex: "group_1") → générer le treillis SEULEMENT pour ce groupe
+    private String currentGroupIdForLattice = null;
+
     public Conf() {
         propertyChangeSupport = new PropertyChangeSupport(this);
         guiConf = new GUIConf();
@@ -195,6 +201,60 @@ public class Conf {
         cancelCalculations();
         propertyChangeSupport.firePropertyChange(new PropertyChangeEvent(this, "filepath", filePath, filePath));
         firePropertyChange(ContextChangeEvents.LOADEDFILE, null, lattice);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // (F1) NOUVELLES MÉTHODES pour Fonctionnalité 1 : Groupes d'Attributs
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * (F1) Définir le groupe pour lequel générer le treillis
+     * 
+     * Utilisé par GenerateLatticeForGroupAction pour dire au système :
+     * "Génère le treillis SEULEMENT pour les attributs du groupe 'group_1'"
+     * 
+     * Exemple :
+     * - Appel : setCurrentGroupIdForLattice("group_1")
+     * - Effet : Le prochain appel à computeLatticeGraph() filtrera les concepts
+     *           pour ce groupe uniquement (au lieu de tous les attributs)
+     * - Résultat : Treillis réduit et plus lisible, focalisé sur une famille d'attributs
+     * 
+     * @param groupId ID du groupe (ex: "group_1") ou null pour revenir au mode normal
+     */
+    public void setCurrentGroupIdForLattice(String groupId) {
+        this.currentGroupIdForLattice = groupId;
+    }
+
+    /**
+     * (F1) Récupérer le groupe actuellement défini pour la génération du treillis
+     * 
+     * Utilisé par LatticeGraphComputer pour savoir s'il faut filtrer les concepts.
+     * 
+     * @return ID du groupe (ex: "group_1") ou null si génération pour tous les attributs
+     */
+    public String getCurrentGroupIdForLattice() {
+        return currentGroupIdForLattice;
+    }
+
+    /**
+     * (F1) Notifier que le treillis doit être recalculé
+     * 
+     * Cette méthode est appelée après un changement de groupe pour forcer la mise à jour
+     * du treillis affiché à l'écran.
+     * 
+     * Flux d'utilisation :
+     * 1. Utilisateur clique "Generate Lattice for Group"
+     * 2. ContextEditor appelle setCurrentGroupIdForLattice("group_1")
+     * 3. ContextEditor appelle latticeChanged()
+     * 4. Les listeners (LatticeView, etc.) reçoivent la notification
+     * 5. LatticeGraphComputer.computeLatticeGraph() est appelé
+     * 6. Le treillis filtré s'affiche
+     * 
+     * Similar à contextChanged() mais spécifiquement pour les changements de groupe
+     */
+    public void latticeChanged() {
+        // Déclencher le recalcul du treillis avec le groupe spécifié
+        firePropertyChange(ContextChangeEvents.LATTICECHANGED, null, lattice);
     }
 
     @SuppressWarnings("serial")

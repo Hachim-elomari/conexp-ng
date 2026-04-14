@@ -17,7 +17,10 @@ import java.util.Map;
 
 import static fcatools.conexpng.Util.clamp;
 import static javax.swing.KeyStroke.getKeyStroke;
-
+import fcatools.conexpng.model.AttributeGroup;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 /**
  * ContextMatrix is simply a customisation of JTable in order to make it look &
  * behave more like a spreadsheet editor resp. ConExp's context editor. The code

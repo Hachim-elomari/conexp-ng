@@ -57,8 +57,18 @@ public class Main {
 
         final Conf state = new Conf();
 
+     // (F1) ✅ Initialiser le chemin du fichier
+        state.filePath = System.getProperty("user.home") + 
+                         System.getProperty("file.separator") + 
+                         "untitled.cex";
+        
+        state.init(0, 0);
+        
         // initialize lattice algorithms
         LatticeGraphComputer.init();
+        
+        // (F1) :
+        LatticeGraphComputer.setConf(state);
 
         boolean firstStart = false;
         File optionsFile = new File(optionsFileName);
