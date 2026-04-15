@@ -20,6 +20,8 @@ import static fcatools.conexpng.Util.clamp;
  * user changes the context through the context editor what really happens is
  * that the context is changed (not the JTable per se) and the JTable is redrawn
  * based on the updated context.
+ * 
+ * (F1) ÉTAPE 2 : Ligne 0 = noms des groupes, Ligne 1 = noms attributs, Data à partir de ligne 2
  */
 public class ContextMatrixModel extends AbstractTableModel implements Reorderable {
 
@@ -31,7 +33,7 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
 
     // (F1) NOUVEAUX CHAMPS pour Fonctionnalité 1 : Groupes d'Attributs
     private boolean displayWithGroups = true;
-    private Map<String, Boolean> groupExpansionState = new HashMap<>();
+    private Map<String, Boolean> groupExpansionState = new HashMap<String, Boolean>();
 
     public ContextMatrixModel(Conf state) {
         loadNewContext(state);
@@ -44,12 +46,13 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
 
     @Override
     public boolean isCellEditable(int i, int j) {
-        return (i + j > 0) && (i == 0 || j == 0);
+        return (i + j > 1) && (i <= 1 || j == 0);
     }
 
+    // (F1) ÉTAPE 2 : getRowCount() retourne +2 (ligne groupes + ligne attributs)
     @Override
     public int getRowCount() {
-        return context.getObjectCount() + 1;
+        return context.getObjectCount() + 2;  // +1 pour groupes, +1 pour attributs
     }
 
     @Override
@@ -131,31 +134,35 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return "";
     }
 
+    // (F1) ÉTAPE 2 : getValueAt modifié
+    // rowIndex == 0 → noms des GROUPES
+    // rowIndex == 1 → noms des ATTRIBUTS
+    // rowIndex >= 2 → DATA
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
-        // Gestion du coin (0,0)
-        if (columnIndex == 0 && rowIndex == 0) {
-            return "";
-        }
-
-        // Colonne objets (index 0)
-        if (columnIndex == 0) {
-            return String.format("%s", context.getObjectAtIndex(rowIndex - 1).getIdentifier());
-        }
-
-        // (F1) EN-TÊTES : Afficher les noms de groupes
+        // (F1) ÉTAPE 2 : Ligne des noms de groupes (rowIndex == 0)
         if (rowIndex == 0) {
-            if (!displayWithGroups) {
-                return String.format("%s", context.getAttributeAtIndex(columnIndex - 1));
+            if (columnIndex == 0) {
+                return ""; // Coin (0,0)
             }
-
-            // Mode avec groupes - utiliser getColumnName
-            return getColumnNameForDisplay(columnIndex);
+            return getGroupNameAtColumn(columnIndex);
         }
 
-        // DATA : Afficher les X et vide
+        // (F1) ÉTAPE 2 : Ligne des noms d'attributs (rowIndex == 1)
+        if (rowIndex == 1) {
+            if (columnIndex == 0) {
+                return ""; // Coin (1,0)
+            }
+            return getAttributeNameAtColumn(columnIndex);
+        }
+
+        // DATA : rowIndex >= 2 (décalage de -2 pour accéder aux objets)
+        if (columnIndex == 0) {
+            return String.format("%s", context.getObjectAtIndex(rowIndex - 2).getIdentifier());
+        }
+
         if (!displayWithGroups) {
-            return context.objectHasAttribute(context.getObjectAtIndex(rowIndex - 1),
+            return context.objectHasAttribute(context.getObjectAtIndex(rowIndex - 2),
                     context.getAttributeAtIndex(columnIndex - 1)) ? "X" : "";
         }
 
@@ -165,7 +172,74 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
     }
 
     /**
-     * (F1) Helper pour afficher les noms de colonnes avec groupes
+     * (F1) ÉTAPE 2 : Récupérer le nom du groupe à une colonne donnée
+     */
+    private String getGroupNameAtColumn(int columnIndex) {
+        int colIdx = 0;
+        int targetIdx = columnIndex - 1;
+
+        for (AttributeGroup group : context.getAllAttributeGroups()) {
+            if (!group.isExpanded()) {
+                if (colIdx == targetIdx) {
+                    return group.getGroupName();  // Retourner le nom du groupe en MAJUSCULES
+                }
+                colIdx++;
+            } else {
+                for (String attr : group.getAttributeNames()) {
+                    if (colIdx == targetIdx) {
+                        return group.getGroupName();  // Attributs du groupe → afficher le nom du groupe
+                    }
+                    colIdx++;
+                }
+            }
+        }
+
+        // Attributs non groupés → retourner vide (pas de groupe)
+        for (String attr : context.getUngroupedAttributes()) {
+            if (colIdx == targetIdx) {
+                return "";
+            }
+            colIdx++;
+        }
+
+        return "";
+    }
+
+    /**
+     * (F1) ÉTAPE 2 : Récupérer le nom de l'attribut à une colonne donnée
+     */
+    private String getAttributeNameAtColumn(int columnIndex) {
+        int colIdx = 0;
+        int targetIdx = columnIndex - 1;
+
+        for (AttributeGroup group : context.getAllAttributeGroups()) {
+            if (!group.isExpanded()) {
+                if (colIdx == targetIdx) {
+                    return "📁 " + group.getGroupName() + " [" + group.getAttributeCount() + "]";
+                }
+                colIdx++;
+            } else {
+                for (String attr : group.getAttributeNames()) {
+                    if (colIdx == targetIdx) {
+                        return attr;
+                    }
+                    colIdx++;
+                }
+            }
+        }
+
+        for (String attr : context.getUngroupedAttributes()) {
+            if (colIdx == targetIdx) {
+                return attr;
+            }
+            colIdx++;
+        }
+
+        return "";
+    }
+
+    /**
+     * (F1) ÉTAPE 2 : Helper pour afficher les noms de colonnes avec groupes (ancien rowIndex == 0)
      */
     private String getColumnNameForDisplay(int columnIndex) {
         int colIdx = 0;
@@ -197,6 +271,9 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return "";
     }
 
+    /**
+     * (F1) ÉTAPE 2 : Afficher les valeurs en mode groupe (décalé de 2 pour les données)
+     */
     private String getDisplayValueForGroupMode(int rowIndex, int columnIndex) {
         int colIdx = 0;
         int targetIdx = columnIndex - 1;
@@ -204,13 +281,10 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         for (AttributeGroup group : context.getAllAttributeGroups()) {
             if (!group.isExpanded()) {
                 if (colIdx == targetIdx) {
-                    if (rowIndex == 0) {
-                        return "📁 " + group.getGroupName();
-                    }
                     boolean allPresent = true;
                     for (String attr : group.getAttributeNames()) {
                         if (!context.objectHasAttribute(
-                                context.getObjectAtIndex(rowIndex - 1), attr)) {
+                                context.getObjectAtIndex(rowIndex - 2), attr)) {
                             allPresent = false;
                             break;
                         }
@@ -221,11 +295,8 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
             } else {
                 for (String attr : group.getAttributeNames()) {
                     if (colIdx == targetIdx) {
-                        if (rowIndex == 0) {
-                            return attr;
-                        }
                         return context.objectHasAttribute(
-                                context.getObjectAtIndex(rowIndex - 1), attr) ? "X" : "";
+                                context.getObjectAtIndex(rowIndex - 2), attr) ? "X" : "";
                     }
                     colIdx++;
                 }
@@ -234,11 +305,8 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
 
         for (String attr : context.getUngroupedAttributes()) {
             if (colIdx == targetIdx) {
-                if (rowIndex == 0) {
-                    return attr;
-                }
                 return context.objectHasAttribute(
-                        context.getObjectAtIndex(rowIndex - 1), attr) ? "X" : "";
+                        context.getObjectAtIndex(rowIndex - 2), attr) ? "X" : "";
             }
             colIdx++;
         }
@@ -246,10 +314,11 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return "";
     }
 
-    // (F1) IMPLÉMENTATION COMPLÈTE de setValueAt
+    // (F1) ÉTAPE 2 : setValueAt modifié (rowIndex >= 2 pour les données)
     @Override
     public void setValueAt(Object value, int rowIndex, int columnIndex) {
-        if (rowIndex == 0 || columnIndex == 0) {
+        // Pas d'édition sur les lignes 0 et 1 (groupes et attributs)
+        if (rowIndex <= 1 || columnIndex == 0) {
             return;
         }
 
@@ -260,7 +329,7 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
             
             String attr = context.getAttributeAtIndex(columnIndex - 1);
             de.tudresden.inf.tcs.fcalib.FullObject<String, String> obj = 
-                context.getObjectAtIndex(rowIndex - 1);
+                context.getObjectAtIndex(rowIndex - 2);  // Décalage -2
             
             state.saveConf();
             context.toggleAttributeForObject(attr, obj.getIdentifier());
@@ -273,7 +342,7 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         String attr = getAttributeAtVisualColumn(columnIndex);
         if (attr != null) {
             de.tudresden.inf.tcs.fcalib.FullObject<String, String> obj = 
-                context.getObjectAtIndex(rowIndex - 1);
+                context.getObjectAtIndex(rowIndex - 2);  // Décalage -2
             
             state.saveConf();
             context.toggleAttributeForObject(attr, obj.getIdentifier());
@@ -318,10 +387,10 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
     public void reorderRows(int from, int to) {
         if (context.getObjectCount() < 2)
             return;
-        if (from < 1 || to < 1)
+        if (from < 2 || to < 2)  // Décalage (ligne 0 et 1 réservées)
             return;
-        from -= 1;
-        to -= 1;
+        from -= 2;  // Décalage -2
+        to -= 2;    // Décalage -2
         from = clamp(from, 0, context.getObjectCount() - 1);
         to = clamp(to, 0, context.getObjectCount() - 1);
         de.tudresden.inf.tcs.fcalib.FullObject<String, String> o = context.getObjectAtIndex(from);
@@ -372,12 +441,7 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return group != null && group.isExpanded();
     }
 
-    /**
-     * (F1) ÉTAPE 1 : Récupérer le groupe à une colonne donnée
-     */
     public AttributeGroup getGroupAtColumn(int columnIndex) {
-        if (columnIndex <= 0) return null;
-        
         int colIdx = 0;
         for (AttributeGroup group : context.getAllAttributeGroups()) {
             if (!group.isExpanded()) {
@@ -386,13 +450,7 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
                 }
                 colIdx++;
             } else {
-                // Vérifier chaque attribut du groupe expanded
-                for (String attr : group.getAttributeNames()) {
-                    if (colIdx == columnIndex - 1) {
-                        return group;  // ← Retourner le groupe aussi pour les attrs expanded
-                    }
-                    colIdx++;
-                }
+                colIdx += group.getAttributeCount();
             }
         }
         return null;
@@ -428,7 +486,7 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
     }
 
     private List<Integer> getVisibleColumnIndices() {
-        List<Integer> visibleIndices = new java.util.ArrayList<>();
+        List<Integer> visibleIndices = new java.util.ArrayList<Integer>();
 
         if (!displayWithGroups) {
             for (int i = 0; i < context.getAttributeCount(); i++) {
