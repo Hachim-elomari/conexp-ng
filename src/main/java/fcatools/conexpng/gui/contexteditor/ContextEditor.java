@@ -59,6 +59,7 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.BoxLayout;
 import java.awt.Dimension;
 import java.awt.BorderLayout;
+
 /**
  * The class responsible for displaying and interacting with ConExpNG's context
  * editor. The main component of this view is a customised JTable, that is more
@@ -341,7 +342,6 @@ public class ContextEditor extends View {
                 "Ungroup", "ungroup",
                 "icons/context editor/transpose.png",
                 am.get("ungroupAttribute")),
-            // (F1) ✅ NOUVEAU BOUTON : Générer treillis pour le groupe
             createButton(
                 "Lattice for Group", "latticeForGroup",
                 "icons/context editor/add_attribute.png",
@@ -373,7 +373,6 @@ public class ContextEditor extends View {
         ActionMap am = matrix.getActionMap();
         
         // (F1) NOUVEAU : Menu contextuel pour les groupes d'attributs
-        // Affiché au clic droit sur un en-tête de groupe
         addMenuItem(groupHeaderPopupMenu,
                 "Rename Group", am.get("renameGroup"));
         addMenuItem(groupHeaderPopupMenu,
@@ -432,7 +431,7 @@ public class ContextEditor extends View {
                 int j = matrix.columnAtPoint(e.getPoint());
                 int clicks = e.getClickCount();
                 if (clicks >= 2 && clicks % 2 == 0 && SwingUtilities.isLeftMouseButton(e)) {
-                    if (i > 0 && j > 0) {
+                    if (i > 1 && j > 0) {  // (F1) ÉTAPE 2 : Changé i > 0 en i > 1
                         invokeAction(ContextEditor.this, new ToggleAction(i, j));
                     }
                 }
@@ -458,8 +457,8 @@ public class ContextEditor extends View {
         if (e.isPopupTrigger()) {
             if (i == 0 && j == 0) {
                 // Don't show a context menu in the matrix corner
-            } else if (i > 0 && j > 0) {
-                if (matrix.getSelectedColumn() <= 0 || matrix.getSelectedRow() <= 0) {
+            } else if (i > 1 && j > 0) {  // (F1) CORRECTION 5 : Changé i > 0 en i > 1
+                if (matrix.getSelectedColumn() <= 0 || matrix.getSelectedRow() <= 1) {  // (F1) Changé <= 0 en <= 1
                     matrix.selectCell(i, j);
                 }
                 cellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
@@ -509,7 +508,8 @@ public class ContextEditor extends View {
             if (matrix.isRenaming)
                 return;
             matrix.saveSelection();
-            int lastActiveRowIndexAfter = clamp(lastActiveRowIndex + vertical, 1, state.context.getObjectCount());
+            // (F1) CORRECTION 7 : Changé clamp(rowIndex + vertical, 1, ...) en clamp(rowIndex + vertical, 2, ...)
+            int lastActiveRowIndexAfter = clamp(lastActiveRowIndex + vertical, 2, state.context.getObjectCount() + 1);
             int lastActiveColumnIndexAfter = clamp(lastActiveColumnIndex + horizontal, 1,
                     state.context.getAttributeCount());
             boolean wasRowChange = (lastActiveRowIndexAfter - lastActiveRowIndex) != 0;
@@ -582,7 +582,8 @@ public class ContextEditor extends View {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming)
                 return;
-            lastActiveRowIndex = clamp(lastActiveRowIndex + vertical, 1, state.context.getObjectCount());
+            // (F1) CORRECTION 6 : Changé clamp(rowIndex + vertical, 1, ...) en clamp(rowIndex + vertical, 2, ...)
+            lastActiveRowIndex = clamp(lastActiveRowIndex + vertical, 2, state.context.getObjectCount() + 1);
             lastActiveColumnIndex = clamp(lastActiveColumnIndex + horizontal, 1, state.context.getAttributeCount());
             matrix.selectCell(lastActiveRowIndex, lastActiveColumnIndex);
         }
@@ -643,9 +644,10 @@ public class ContextEditor extends View {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming)
                 return;
-            if (i <= 0 || j <= 0)
+            if (i <= 1 || j <= 0)  // (F1) CORRECTION 1 : Changé i <= 0 en i <= 1
                 return;
-            int i = clamp(this.i, 1, state.context.getObjectCount()) - 1;
+            // (F1) CORRECTION 1 : Changé clamp(this.i, 1, ...) - 1 en clamp(this.i - 2, 0, ...)
+            int i = clamp(this.i - 2, 0, state.context.getObjectCount() - 1);
             int j = clamp(this.j, 1, state.context.getAttributeCount()) - 1;
             state.saveConf();
             state.context.toggleAttributeForObject(state.context.getAttributeAtIndex(j), state.context
@@ -915,7 +917,8 @@ public class ContextEditor extends View {
             if (state.context.getObjectCount() == 0) {
                 return;
             }
-            final String name = state.context.getObjectAtIndex(lastActiveRowIndex - 1).getIdentifier();
+            // (F1) CORRECTION 2 : Changé lastActiveRowIndex - 1 en lastActiveRowIndex - 2
+            final String name = state.context.getObjectAtIndex(lastActiveRowIndex - 2).getIdentifier();
             final JTextField t = matrix.renameRowHeader(lastActiveRowIndex);
             Timer timer = new Timer(0, new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
@@ -962,7 +965,8 @@ public class ContextEditor extends View {
             matrix.saveSelection();
             try {
                 state.saveConf();
-                state.context.removeObject(state.context.getObjectAtIndex(lastActiveRowIndex - 1).getIdentifier());
+                // (F1) CORRECTION 3 : Changé lastActiveRowIndex - 1 en lastActiveRowIndex - 2
+                state.context.removeObject(state.context.getObjectAtIndex(lastActiveRowIndex - 2).getIdentifier());
                 if (lastActiveRowIndex - 1 >= state.context.getObjectCount()) {
                     lastActiveRowIndex--;
                 }
@@ -1011,7 +1015,8 @@ public class ContextEditor extends View {
                 return;
             }
             matrix.saveSelection();
-            int i = Math.min(matrix.getLastSelectedRowsStartIndex(), matrix.getLastSelectedRowsEndIndex()) - 1;
+            // (F1) CORRECTION 4 : Changé - 1 en - 2
+            int i = Math.min(matrix.getLastSelectedRowsStartIndex(), matrix.getLastSelectedRowsEndIndex()) - 2;
             int d = Math.abs(matrix.getLastSelectedRowsStartIndex() - matrix.getLastSelectedRowsEndIndex()) + 1;
             state.saveConf();
             for (int unused = 0; unused < d; unused++) {
@@ -1074,7 +1079,6 @@ public class ContextEditor extends View {
 
     class GroupSelectedAttributesAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
-            // (F1) ÉTAPE 1 : Obtenir les attributs disponibles (non groupés)
             java.util.Collection<String> availableAttrs = state.context.getUngroupedAttributes();
             
             if (availableAttrs.isEmpty()) {
@@ -1086,7 +1090,6 @@ public class ContextEditor extends View {
                 return;
             }
 
-            // (F1) ÉTAPE 1 : Créer une dialog avec checkboxes
             AttributeSelectionDialog dialog = new AttributeSelectionDialog(
             	    ContextEditor.this,
             	    new java.util.ArrayList<String>(availableAttrs));
@@ -1105,7 +1108,6 @@ public class ContextEditor extends View {
                     return;
                 }
 
-                // (F1) ÉTAPE 1 : Demander le nom du groupe
                 String groupName = JOptionPane.showInputDialog(
                     ContextEditor.this,
                     "Enter group name:",
@@ -1116,10 +1118,8 @@ public class ContextEditor extends View {
                     return;
                 }
 
-                // (F1) ÉTAPE 1 : Transformer en MAJUSCULES
                 String groupNameUpper = groupName.trim().toUpperCase();
 
-                // (F1) ÉTAPE 1 : Vérifier unicité
                 if (state.context.getAttributeGroupManager().groupNameExists(groupNameUpper)) {
                     JOptionPane.showMessageDialog(
                         ContextEditor.this,
@@ -1129,7 +1129,6 @@ public class ContextEditor extends View {
                     return;
                 }
 
-                // (F1) ÉTAPE 1 : Créer le groupe
                 state.saveConf();
                 String groupId = state.context.createAttributeGroup(groupNameUpper, selectedAttrs);
                 
@@ -1151,24 +1150,83 @@ public class ContextEditor extends View {
         }
     }
 
+ // (F1) CORRECTION : UngroupAttributeAction - Avec dialog pour choisir le groupe à dégrouper
     class UngroupAttributeAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) {
                 return;
             }
 
-            AttributeGroup group = matrixModel.getGroupAtColumn(lastActiveColumnIndex);
-            if (group == null) {
+            // Récupérer tous les groupes disponibles
+            java.util.List<AttributeGroup> allGroups = new java.util.ArrayList<AttributeGroup>(
+                state.context.getAllAttributeGroups());
+
+            if (allGroups.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    ContextEditor.this,
+                    "No attribute groups to ungroup!",
+                    "No Groups",
+                    JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
 
+            // Créer une liste d'options
+            java.util.List<String> options = new java.util.ArrayList<String>();
+            java.util.Map<String, AttributeGroup> groupMap = new java.util.HashMap<String, AttributeGroup>();
+
+            for (AttributeGroup group : allGroups) {
+                String label = group.getGroupName() + " (" + group.getAttributeCount() + " attributes)";
+                options.add(label);
+                groupMap.put(label, group);
+            }
+
+            // Dialog de sélection
+            String[] optionsArray = options.toArray(new String[0]);
+            String selected = (String) JOptionPane.showInputDialog(
+                ContextEditor.this,
+                "Select a group to ungroup:",
+                "Ungroup Attributes",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                optionsArray,
+                optionsArray[0]);
+
+            if (selected == null) {
+                return; // Utilisateur a annulé
+            }
+
+            AttributeGroup selectedGroup = groupMap.get(selected);
+            if (selectedGroup == null) {
+                return;
+            }
+
+            // Confirmer avant de dégrouper
+            int confirm = JOptionPane.showConfirmDialog(
+                ContextEditor.this,
+                "Remove group '" + selectedGroup.getGroupName() + "' and ungroup " + 
+                selectedGroup.getAttributeCount() + " attributes?",
+                "Confirm Ungroup",
+                JOptionPane.YES_NO_OPTION);
+
+            if (confirm != JOptionPane.YES_OPTION) {
+                return;
+            }
+
+            // Dégrouper
             state.saveConf();
-            state.context.removeAttributeGroup(group.getGroupId());
+            state.context.removeAttributeGroup(selectedGroup.getGroupId());
             matrixModel.fireTableStructureChanged();
             matrix.invalidate();
             matrix.repaint();
             state.contextChanged();
             state.getContextEditorUndoManager().makeRedoable();
+
+            JOptionPane.showMessageDialog(
+                ContextEditor.this,
+                "Group '" + selectedGroup.getGroupName() + "' has been removed.\n" +
+                "Its " + selectedGroup.getAttributeCount() + " attributes are now ungrouped.",
+                "Ungroup Successful",
+                JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
@@ -1218,30 +1276,76 @@ public class ContextEditor extends View {
         }
     }
 
+    // (F1) CORRECTION 8 : GenerateLatticeForGroupAction - Corrigée avec dialog
     class GenerateLatticeForGroupAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) {
                 return;
             }
 
-            AttributeGroup group = matrixModel.getGroupAtColumn(lastActiveColumnIndex);
-            if (group == null) {
+            java.util.List<AttributeGroup> allGroups = new java.util.ArrayList<AttributeGroup>(
+                state.context.getAllAttributeGroups());
+            java.util.Collection<String> ungroupedAttrs = state.context.getUngroupedAttributes();
+
+            java.util.List<String> options = new java.util.ArrayList<String>();
+            java.util.Map<String, AttributeGroup> groupMap = new java.util.HashMap<String, AttributeGroup>();
+
+            for (AttributeGroup group : allGroups) {
+                String label = group.getGroupName() + " (" + group.getAttributeCount() + " attributes)";
+                options.add(label);
+                groupMap.put(label, group);
+            }
+
+            for (String attr : ungroupedAttrs) {
+                options.add(attr + " (single attribute)");
+                groupMap.put(attr + " (single attribute)", null);
+            }
+
+            if (options.isEmpty()) {
                 JOptionPane.showMessageDialog(
                     ContextEditor.this,
-                    "Please select a group to generate lattice for.",
-                    "No Group Selected",
-                    JOptionPane.WARNING_MESSAGE);
+                    "No groups or attributes available.",
+                    "Empty Context",
+                    JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
 
-            // (F1) ✅ IMPLÉMENTATION : Générer le treillis pour ce groupe
-            state.setCurrentGroupIdForLattice(group.getGroupId());
+            String[] optionsArray = options.toArray(new String[0]);
+            String selected = (String) JOptionPane.showInputDialog(
+                ContextEditor.this,
+                "Select a group to generate lattice for:",
+                "Generate Lattice for Group",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                optionsArray,
+                optionsArray[0]);
+
+            if (selected == null) {
+                return;
+            }
+
+            AttributeGroup selectedGroup = groupMap.get(selected);
+
+            if (selectedGroup == null) {
+                String attrName = selected.replace(" (single attribute)", "");
+                JOptionPane.showMessageDialog(
+                    ContextEditor.this,
+                    "Generating lattice for single attribute: " + attrName,
+                    "Single Attribute Lattice",
+                    JOptionPane.INFORMATION_MESSAGE);
+                
+                state.setCurrentGroupIdForLattice(null);
+                state.contextChanged();
+                return;
+            }
+
+            state.setCurrentGroupIdForLattice(selectedGroup.getGroupId());
             state.contextChanged();
-            
+
             JOptionPane.showMessageDialog(
                 ContextEditor.this,
-                "Lattice generated for group: " + group.getGroupName() + "\n" +
-                "Displaying filtered lattice with " + group.getAttributeCount() + " attributes.",
+                "Lattice generated for group: " + selectedGroup.getGroupName() + "\n" +
+                "Displaying filtered lattice with " + selectedGroup.getAttributeCount() + " attributes.",
                 "Lattice Generated",
                 JOptionPane.INFORMATION_MESSAGE);
         }
@@ -1292,26 +1396,23 @@ public class ContextEditor extends View {
     @SuppressWarnings("serial")
     private class AttributeSelectionDialog extends JDialog {
         private boolean confirmed = false;
-        private java.util.Set<String> selectedAttributes = new java.util.HashSet<>();
-        private java.util.List<JCheckBox> checkboxes = new java.util.ArrayList<>();
+        private java.util.Set<String> selectedAttributes = new java.util.HashSet<String>();
+        private java.util.List<JCheckBox> checkboxes = new java.util.ArrayList<JCheckBox>();
         private java.awt.Component parentComponent;
         
         public AttributeSelectionDialog(ContextEditor contextEditor, java.util.List<String> availableAttributes) {
             super(SwingUtilities.getWindowAncestor(contextEditor), 
                   "Select Attributes to Group", 
                   JDialog.ModalityType.APPLICATION_MODAL);
-            this.parentComponent = contextEditor;  // ← Utiliser contextEditor
+            this.parentComponent = contextEditor;
             setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
             
-            // Panel principal
             JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
             mainPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
             
-            // Label
             JLabel label = new JLabel("Select attributes to group:");
             mainPanel.add(label, BorderLayout.NORTH);
             
-            // Panel avec checkboxes (scrollable)
             JPanel checkboxPanel = new JPanel();
             checkboxPanel.setLayout(new BoxLayout(checkboxPanel, BoxLayout.Y_AXIS));
             
@@ -1325,12 +1426,10 @@ public class ContextEditor extends View {
             scrollPane.setPreferredSize(new Dimension(300, 200));
             mainPanel.add(scrollPane, BorderLayout.CENTER);
             
-            // Panel boutons
             JPanel buttonPanel = new JPanel();
             JButton okButton = new JButton("OK");
             JButton cancelButton = new JButton("Cancel");
             
-            // (F1) JAVA 7 : Classe anonyme au lieu de lambda
             okButton.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
                     confirmed = true;
@@ -1343,7 +1442,6 @@ public class ContextEditor extends View {
                 }
             });
             
-            // (F1) JAVA 7 : Classe anonyme au lieu de lambda
             cancelButton.addActionListener(new ActionListener() {
                 public void actionPerformed(ActionEvent e) {
                     confirmed = false;
@@ -1357,7 +1455,7 @@ public class ContextEditor extends View {
             
             add(mainPanel);
             pack();
-            setLocationRelativeTo(parentComponent);  // ← Utiliser parentComponent
+            setLocationRelativeTo(parentComponent);
         }
 
         public boolean isConfirmed() {
