@@ -372,7 +372,12 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return group != null && group.isExpanded();
     }
 
+    /**
+     * (F1) ÉTAPE 1 : Récupérer le groupe à une colonne donnée
+     */
     public AttributeGroup getGroupAtColumn(int columnIndex) {
+        if (columnIndex <= 0) return null;
+        
         int colIdx = 0;
         for (AttributeGroup group : context.getAllAttributeGroups()) {
             if (!group.isExpanded()) {
@@ -381,7 +386,13 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
                 }
                 colIdx++;
             } else {
-                colIdx += group.getAttributeCount();
+                // Vérifier chaque attribut du groupe expanded
+                for (String attr : group.getAttributeNames()) {
+                    if (colIdx == columnIndex - 1) {
+                        return group;  // ← Retourner le groupe aussi pour les attrs expanded
+                    }
+                    colIdx++;
+                }
             }
         }
         return null;

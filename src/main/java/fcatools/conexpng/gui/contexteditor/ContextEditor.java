@@ -23,8 +23,10 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.ActionMap;
 import javax.swing.InputMap;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -47,7 +49,16 @@ import fcatools.conexpng.io.locale.LocaleHandler;
 
 // (F1) Imports pour Fonctionnalité 1 : Groupes d'Attributs
 import fcatools.conexpng.model.AttributeGroup;
-
+import javax.swing.JDialog;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JCheckBox;
+import javax.swing.JScrollPane;
+import javax.swing.BorderFactory;
+import javax.swing.border.EmptyBorder;
+import javax.swing.BoxLayout;
+import java.awt.Dimension;
+import java.awt.BorderLayout;
 /**
  * The class responsible for displaying and interacting with ConExpNG's context
  * editor. The main component of this view is a customised JTable, that is more
@@ -1063,48 +1074,64 @@ public class ContextEditor extends View {
 
     class GroupSelectedAttributesAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
-            // (F1) ✅ Demander directement le NOM des attributs à grouper
-            String attrInput = JOptionPane.showInputDialog(
-                ContextEditor.this,
-                "Enter attribute names to group (comma-separated):\n" +
-                "Available: " + state.context.getAttributes().toString(),
-                "Group Attributes",
-                JOptionPane.QUESTION_MESSAGE);
-
-            if (attrInput == null || attrInput.trim().isEmpty()) {
-                return;
-            }
-
-            // Parser les attributs saisis
-            java.util.Set<String> selectedAttrs = new java.util.HashSet<>();
-            String[] parts = attrInput.split(",");
+            // (F1) ÉTAPE 1 : Obtenir les attributs disponibles (non groupés)
+            java.util.Collection<String> availableAttrs = state.context.getUngroupedAttributes();
             
-            for (String part : parts) {
-                String attr = part.trim();
-                if (state.context.getAttributes().contains(attr)) {
-                    selectedAttrs.add(attr);
-                    System.out.println("[F1] Attribut trouvé : " + attr);
-                } else {
-                    System.out.println("[F1] ❌ Attribut INEXISTANT : " + attr);
-                }
-            }
-
-            if (selectedAttrs.isEmpty()) {
-                JOptionPane.showMessageDialog(ContextEditor.this, 
-                    "❌ Aucun attribut valide trouvé !", 
-                    "Error", JOptionPane.ERROR_MESSAGE);
+            if (availableAttrs.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    ContextEditor.this,
+                    "All attributes are already grouped!",
+                    "No Attributes Available",
+                    JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
 
-            String groupName = JOptionPane.showInputDialog(
-                ContextEditor.this,
-                "Enter group name:",
-                "Group Attributes",
-                JOptionPane.QUESTION_MESSAGE);
+            // (F1) ÉTAPE 1 : Créer une dialog avec checkboxes
+            AttributeSelectionDialog dialog = new AttributeSelectionDialog(
+            	    ContextEditor.this,
+            	    new java.util.ArrayList<String>(availableAttrs));
+            
+            dialog.setVisible(true);
+            
+            if (dialog.isConfirmed()) {
+                java.util.Set<String> selectedAttrs = dialog.getSelectedAttributes();
+                
+                if (selectedAttrs.isEmpty()) {
+                    JOptionPane.showMessageDialog(
+                        ContextEditor.this,
+                        "Please select at least one attribute!",
+                        "No Selection",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
 
-            if (groupName != null && !groupName.isEmpty()) {
+                // (F1) ÉTAPE 1 : Demander le nom du groupe
+                String groupName = JOptionPane.showInputDialog(
+                    ContextEditor.this,
+                    "Enter group name:",
+                    "Create Group",
+                    JOptionPane.QUESTION_MESSAGE);
+
+                if (groupName == null || groupName.isEmpty()) {
+                    return;
+                }
+
+                // (F1) ÉTAPE 1 : Transformer en MAJUSCULES
+                String groupNameUpper = groupName.trim().toUpperCase();
+
+                // (F1) ÉTAPE 1 : Vérifier unicité
+                if (state.context.getAttributeGroupManager().groupNameExists(groupNameUpper)) {
+                    JOptionPane.showMessageDialog(
+                        ContextEditor.this,
+                        "A group with name '" + groupNameUpper + "' already exists!",
+                        "Duplicate Group Name",
+                        JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                // (F1) ÉTAPE 1 : Créer le groupe
                 state.saveConf();
-                String groupId = state.context.createAttributeGroup(groupName, selectedAttrs);
+                String groupId = state.context.createAttributeGroup(groupNameUpper, selectedAttrs);
                 
                 if (groupId != null) {
                     state.context.reorganizeAttributesForGroups();
@@ -1113,6 +1140,12 @@ public class ContextEditor extends View {
                     matrix.repaint();
                     state.contextChanged();
                     state.getContextEditorUndoManager().makeRedoable();
+                    
+                    JOptionPane.showMessageDialog(
+                        ContextEditor.this,
+                        "Group '" + groupNameUpper + "' created with " + selectedAttrs.size() + " attributes!",
+                        "Success",
+                        JOptionPane.INFORMATION_MESSAGE);
                 }
             }
         }
@@ -1252,5 +1285,87 @@ public class ContextEditor extends View {
             }
         });
     }
+    
+    /**
+     * (F1) ÉTAPE 1 : Dialog pour sélectionner visuellement les attributs à grouper
+     */
+    @SuppressWarnings("serial")
+    private class AttributeSelectionDialog extends JDialog {
+        private boolean confirmed = false;
+        private java.util.Set<String> selectedAttributes = new java.util.HashSet<>();
+        private java.util.List<JCheckBox> checkboxes = new java.util.ArrayList<>();
+        private java.awt.Component parentComponent;
+        
+        public AttributeSelectionDialog(ContextEditor contextEditor, java.util.List<String> availableAttributes) {
+            super(SwingUtilities.getWindowAncestor(contextEditor), 
+                  "Select Attributes to Group", 
+                  JDialog.ModalityType.APPLICATION_MODAL);
+            this.parentComponent = contextEditor;  // ← Utiliser contextEditor
+            setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+            
+            // Panel principal
+            JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+            mainPanel.setBorder(new EmptyBorder(10, 10, 10, 10));
+            
+            // Label
+            JLabel label = new JLabel("Select attributes to group:");
+            mainPanel.add(label, BorderLayout.NORTH);
+            
+            // Panel avec checkboxes (scrollable)
+            JPanel checkboxPanel = new JPanel();
+            checkboxPanel.setLayout(new BoxLayout(checkboxPanel, BoxLayout.Y_AXIS));
+            
+            for (String attr : availableAttributes) {
+                JCheckBox checkbox = new JCheckBox(attr);
+                checkboxes.add(checkbox);
+                checkboxPanel.add(checkbox);
+            }
+            
+            JScrollPane scrollPane = new JScrollPane(checkboxPanel);
+            scrollPane.setPreferredSize(new Dimension(300, 200));
+            mainPanel.add(scrollPane, BorderLayout.CENTER);
+            
+            // Panel boutons
+            JPanel buttonPanel = new JPanel();
+            JButton okButton = new JButton("OK");
+            JButton cancelButton = new JButton("Cancel");
+            
+            // (F1) JAVA 7 : Classe anonyme au lieu de lambda
+            okButton.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    confirmed = true;
+                    for (JCheckBox checkbox : checkboxes) {
+                        if (checkbox.isSelected()) {
+                            selectedAttributes.add(checkbox.getText());
+                        }
+                    }
+                    dispose();
+                }
+            });
+            
+            // (F1) JAVA 7 : Classe anonyme au lieu de lambda
+            cancelButton.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    confirmed = false;
+                    dispose();
+                }
+            });
+            
+            buttonPanel.add(okButton);
+            buttonPanel.add(cancelButton);
+            mainPanel.add(buttonPanel, BorderLayout.SOUTH);
+            
+            add(mainPanel);
+            pack();
+            setLocationRelativeTo(parentComponent);  // ← Utiliser parentComponent
+        }
 
+        public boolean isConfirmed() {
+            return confirmed;
+        }
+
+        public java.util.Set<String> getSelectedAttributes() {
+            return selectedAttributes;
+        }
+    }
 }
