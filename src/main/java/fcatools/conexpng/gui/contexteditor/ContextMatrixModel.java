@@ -30,8 +30,8 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
     private Conf state;
 
     // (F1) NOUVEAUX CHAMPS pour Fonctionnalité 1 : Groupes d'Attributs
-    private boolean displayWithGroups = true;  // Afficher les groupes (replié/déplié)
-    private Map<String, Boolean> groupExpansionState = new HashMap<>();  // État expansion des groupes
+    private boolean displayWithGroups = true;
+    private Map<String, Boolean> groupExpansionState = new HashMap<>();
 
     public ContextMatrixModel(Conf state) {
         loadNewContext(state);
@@ -52,33 +52,85 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return context.getObjectCount() + 1;
     }
 
-    // (F1) REDÉFINI pour Fonctionnalité 1 : Afficher colonnes groupées
     @Override
     public int getColumnCount() {
         if (!displayWithGroups) {
             return context.getAttributeCount() + 1;
         }
 
-        // Mode avec groupes: 
-        // colonnes = (groupes repliés) + (attributs dépliés) + (attributs non groupés)
-        int count = 1;  // +1 pour colonne objets
+        int count = 1;
 
-        // Compter les groupes repliés comme 1 colonne chacun
         for (AttributeGroup group : context.getAllAttributeGroups()) {
             if (!group.isExpanded()) {
-                count += 1;  // Super-colonne groupe
+                count += 1;
             } else {
-                count += group.getAttributeCount();  // Attributs déployés
+                count += group.getAttributeCount();
             }
         }
 
-        // Ajouter les attributs non groupés
         count += context.getUngroupedAttributes().size();
 
         return count;
     }
 
-    // (F1) REDÉFINI pour Fonctionnalité 1 : Afficher données avec groupes
+    // (F1) NOUVEAU : getColumnName avec support groupes
+    @Override
+    public String getColumnName(int columnIndex) {
+        System.out.println("[F1-HEADER] Col " + columnIndex + 
+                           " displayWithGroups=" + displayWithGroups + 
+                           " groupCount=" + context.getAllAttributeGroups().size());
+        
+        if (columnIndex == 0) {
+            return "";
+        }
+
+        if (!displayWithGroups) {
+            return context.getAttributeAtIndex(columnIndex - 1);
+        }
+
+        int colIdx = 0;
+        int targetIdx = columnIndex - 1;
+        
+        System.out.println("[F1-HEADER] targetIdx=" + targetIdx);
+
+        for (AttributeGroup group : context.getAllAttributeGroups()) {
+            System.out.println("[F1-HEADER] Group: " + group.getGroupName() + 
+                              " expanded=" + group.isExpanded() + 
+                              " attrs=" + group.getAttributeNames());
+            
+            if (!group.isExpanded()) {
+                if (colIdx == targetIdx) {
+                    String result = "▼ " + group.getGroupName() + " [" + group.getAttributeCount() + "]";
+                    System.out.println("[F1-HEADER] RETOUR (collapsed): " + result);
+                    return result;
+                }
+                colIdx++;
+            } else {
+                for (String attr : group.getAttributeNames()) {
+                    System.out.println("[F1-HEADER]   colIdx=" + colIdx + " vs targetIdx=" + targetIdx + " attr=" + attr);
+                    if (colIdx == targetIdx) {
+                        String result = attr + " (" + group.getGroupName() + ")";
+                        System.out.println("[F1-HEADER] RETOUR (expanded): " + result);
+                        return result;
+                    }
+                    colIdx++;
+                }
+            }
+        }
+
+        for (String attr : context.getUngroupedAttributes()) {
+            System.out.println("[F1-HEADER]   non-grouped colIdx=" + colIdx + " vs targetIdx=" + targetIdx + " attr=" + attr);
+            if (colIdx == targetIdx) {
+                System.out.println("[F1-HEADER] RETOUR (ungrouped): " + attr);
+                return attr;
+            }
+            colIdx++;
+        }
+
+        System.out.println("[F1-HEADER] RETOUR (default empty string)");
+        return "";
+    }
+
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
         // Gestion du coin (0,0)
@@ -91,38 +143,70 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
             return String.format("%s", context.getObjectAtIndex(rowIndex - 1).getIdentifier());
         }
 
-        if (!displayWithGroups) {
-            // Mode normal (sans groupes)
-            if (rowIndex == 0) {
+        // (F1) EN-TÊTES : Afficher les noms de groupes
+        if (rowIndex == 0) {
+            if (!displayWithGroups) {
                 return String.format("%s", context.getAttributeAtIndex(columnIndex - 1));
             }
+
+            // Mode avec groupes - utiliser getColumnName
+            return getColumnNameForDisplay(columnIndex);
+        }
+
+        // DATA : Afficher les X et vide
+        if (!displayWithGroups) {
             return context.objectHasAttribute(context.getObjectAtIndex(rowIndex - 1),
                     context.getAttributeAtIndex(columnIndex - 1)) ? "X" : "";
         }
 
-        // (F1) Mode avec groupes
+        // Mode avec groupes
         String displayValue = getDisplayValueForGroupMode(rowIndex, columnIndex);
         return displayValue;
     }
 
-    // (F1) NOUVELLE MÉTHODE HELPER pour Fonctionnalité 1
     /**
-     * Helper pour afficher les valeurs en mode groupe
+     * (F1) Helper pour afficher les noms de colonnes avec groupes
      */
+    private String getColumnNameForDisplay(int columnIndex) {
+        int colIdx = 0;
+        int targetIdx = columnIndex - 1;
+
+        for (AttributeGroup group : context.getAllAttributeGroups()) {
+            if (!group.isExpanded()) {
+                if (colIdx == targetIdx) {
+                    return "▼ " + group.getGroupName() + " [" + group.getAttributeCount() + "]";
+                }
+                colIdx++;
+            } else {
+                for (String attr : group.getAttributeNames()) {
+                    if (colIdx == targetIdx) {
+                        return attr + " (" + group.getGroupName() + ")";
+                    }
+                    colIdx++;
+                }
+            }
+        }
+
+        for (String attr : context.getUngroupedAttributes()) {
+            if (colIdx == targetIdx) {
+                return attr;
+            }
+            colIdx++;
+        }
+
+        return "";
+    }
+
     private String getDisplayValueForGroupMode(int rowIndex, int columnIndex) {
         int colIdx = 0;
         int targetIdx = columnIndex - 1;
 
-        // Parcourir les groupes
         for (AttributeGroup group : context.getAllAttributeGroups()) {
             if (!group.isExpanded()) {
-                // Groupe replié = super-colonne
                 if (colIdx == targetIdx) {
-                    // C'est l'en-tête: afficher "📁 GroupeName"
                     if (rowIndex == 0) {
                         return "📁 " + group.getGroupName();
                     }
-                    // Pour les données: afficher "X" si ALL attributs du groupe sont présents
                     boolean allPresent = true;
                     for (String attr : group.getAttributeNames()) {
                         if (!context.objectHasAttribute(
@@ -135,7 +219,6 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
                 }
                 colIdx++;
             } else {
-                // Groupe déplié = afficher attributs individuels
                 for (String attr : group.getAttributeNames()) {
                     if (colIdx == targetIdx) {
                         if (rowIndex == 0) {
@@ -149,7 +232,6 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
             }
         }
 
-        // Attributs non groupés
         for (String attr : context.getUngroupedAttributes()) {
             if (colIdx == targetIdx) {
                 if (rowIndex == 0) {
@@ -164,9 +246,41 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return "";
     }
 
+    // (F1) IMPLÉMENTATION COMPLÈTE de setValueAt
     @Override
-    public void setValueAt(Object value, int i, int j) {
+    public void setValueAt(Object value, int rowIndex, int columnIndex) {
+        if (rowIndex == 0 || columnIndex == 0) {
+            return;
+        }
 
+        if (!displayWithGroups) {
+            if (columnIndex > context.getAttributeCount()) {
+                return;
+            }
+            
+            String attr = context.getAttributeAtIndex(columnIndex - 1);
+            de.tudresden.inf.tcs.fcalib.FullObject<String, String> obj = 
+                context.getObjectAtIndex(rowIndex - 1);
+            
+            state.saveConf();
+            context.toggleAttributeForObject(attr, obj.getIdentifier());
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
+            fireTableCellUpdated(rowIndex, columnIndex);
+            return;
+        }
+
+        String attr = getAttributeAtVisualColumn(columnIndex);
+        if (attr != null) {
+            de.tudresden.inf.tcs.fcalib.FullObject<String, String> obj = 
+                context.getObjectAtIndex(rowIndex - 1);
+            
+            state.saveConf();
+            context.toggleAttributeForObject(attr, obj.getIdentifier());
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
+            fireTableCellUpdated(rowIndex, columnIndex);
+        }
     }
 
     public String getAttributeNameAt(int i) {
@@ -237,13 +351,6 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         state.getContextEditorUndoManager().makeRedoable();
     }
 
-    // ═════════════════════════════════════════════════════════════
-    // (F1) NOUVELLES MÉTHODES pour Fonctionnalité 1 : Groupes d'Attributs
-    // ═════════════════════════════════════════════════════════════
-
-    /**
-     * (F1) Toggle display mode: with/without groups
-     */
     public void setDisplayWithGroups(boolean value) {
         if (displayWithGroups != value) {
             displayWithGroups = value;
@@ -251,32 +358,20 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         }
     }
 
-    /**
-     * (F1) Check if currently displaying with groups
-     */
     public boolean isDisplayWithGroups() {
         return displayWithGroups;
     }
 
-    /**
-     * (F1) Toggle expansion state of a group
-     */
     public void toggleGroupExpansion(String groupId) {
         context.getAttributeGroupManager().toggleGroupExpansion(groupId);
         fireTableStructureChanged();
     }
 
-    /**
-     * (F1) Check if a group is expanded
-     */
     public boolean isGroupExpanded(String groupId) {
         AttributeGroup group = context.getAttributeGroupManager().getGroup(groupId);
         return group != null && group.isExpanded();
     }
 
-    /**
-     * (F1) Get the group at a specific visual column (null if not a group)
-     */
     public AttributeGroup getGroupAtColumn(int columnIndex) {
         int colIdx = 0;
         for (AttributeGroup group : context.getAllAttributeGroups()) {
@@ -292,9 +387,6 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return null;
     }
 
-    /**
-     * (F1) Get the attribute at a specific visual column (null if not an attribute)
-     */
     public String getAttributeAtVisualColumn(int columnIndex) {
         if (columnIndex <= 0) {
             return null;
@@ -324,30 +416,19 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return null;
     }
 
-    /**
-     * (F1) Get visible column indices (handles grouped attributes)
-     * Returns: list of attribute indices that should be displayed
-     * 
-     * ⚠️ CORRIGÉ: Utilise getAttributeAtIndex() au lieu de indexOf() 
-     * car getAttributes() retourne un IndexedSet, pas une List
-     */
     private List<Integer> getVisibleColumnIndices() {
         List<Integer> visibleIndices = new java.util.ArrayList<>();
 
         if (!displayWithGroups) {
-            // Mode normal: afficher toutes les colonnes
             for (int i = 0; i < context.getAttributeCount(); i++) {
                 visibleIndices.add(i);
             }
             return visibleIndices;
         }
 
-        // Mode avec groupes
         for (AttributeGroup group : context.getAllAttributeGroups()) {
             if (group.isExpanded()) {
-                // Si groupe déplié: afficher tous les attributs du groupe
                 for (String attr : group.getAttributeNames()) {
-                    // (F1) Trouver l'index de cet attribut en boucle
                     for (int i = 0; i < context.getAttributeCount(); i++) {
                         if (context.getAttributeAtIndex(i).equals(attr)) {
                             visibleIndices.add(i);
@@ -356,12 +437,9 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
                     }
                 }
             }
-            // Si groupe replié: ne rien afficher (il y a une super-colonne)
         }
 
-        // Ajouter les attributs non groupés
         for (String attr : context.getUngroupedAttributes()) {
-            // (F1) Trouver l'index de cet attribut en boucle
             for (int i = 0; i < context.getAttributeCount(); i++) {
                 if (context.getAttributeAtIndex(i).equals(attr)) {
                     visibleIndices.add(i);
