@@ -1,5 +1,6 @@
 package fcatools.conexpng.gui.lattice;
 
+import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
@@ -67,6 +68,7 @@ public class LatticeView extends View {
         }
         latticeGraphView = new LatticeGraphView(state);
         view = new WebScrollPane(latticeGraphView);
+        
         LatticeViewInteractions interactions = new LatticeViewInteractions(state.getLatticeViewUndoManager());
         latticeGraphView.addMouseListener(interactions);
         latticeGraphView.addMouseMotionListener(interactions);
@@ -238,7 +240,7 @@ public class LatticeView extends View {
 
         WebButton zoomOriginal = Util.createButton(LocaleHandler.getString("LatticeView.LatticeView.zoomOriginal"),
                 "zoomOriginal",
- "icons/jlfgr/Zoom24.gif");
+                "icons/jlfgr/Zoom24.gif");
         zoomOriginal.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent arg0) {

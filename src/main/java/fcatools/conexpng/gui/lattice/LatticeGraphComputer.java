@@ -369,4 +369,133 @@ public class LatticeGraphComputer {
         currentGroupIdForLattice = null;
         System.out.println("[F1] Filtre de groupe supprimé - retour au treillis complet");
     }
+    
+    /**
+     * (F1) Calculer le lattice pour un ensemble spécifique d'attributs sélectionnés
+     * 
+     * Utilisé par AttributeSelectionPanel quand l'utilisateur coche/décoche des attributs.
+     * 
+     * @param selectedAttributes Set des attributs à inclure
+     * @param context Le contexte formel
+     * @param bounds Les limites de l'écran
+     * @return Le lattice calculé avec les attributs sélectionnés
+     */
+    public static LatticeGraph computeLatticeForSelectedAttributes(java.util.Set<String> selectedAttributes,
+            FormalContext context, Rectangle bounds) {
+        System.out.println("[F1-LATTICE] Computing lattice for " + selectedAttributes.size() + " attributes");
+        
+        if (selectedAttributes == null || selectedAttributes.isEmpty()) {
+            System.out.println("[F1-LATTICE] No attributes selected, returning empty lattice");
+            initGraph();
+            return graph;
+        }
+        
+        // Créer un sous-contexte avec SEULEMENT les attributs sélectionnés
+        FormalContext filteredContext = createFilteredContextFromSelection(selectedAttributes, context);
+        
+        if (filteredContext == null || filteredContext.getAttributeCount() == 0) {
+            System.out.println("[F1-LATTICE] Filtered context has no attributes");
+            initGraph();
+            return graph;
+        }
+        
+        try {
+            // Générer les concepts du contexte filtré
+            Set<Concept<String, FullObject<String, String>>> filteredConcepts = 
+                filteredContext.getConceptsWithoutConsideredElements();
+            
+            lattConcepts = filteredConcepts;
+            System.out.println("[F1-LATTICE] Lattice computed for filtered context. Concepts: " + 
+                              filteredConcepts.size());
+            
+            // Calculer le lattice comme d'habitude
+            screenWidth = bounds.width;
+            screenHeight = bounds.height;
+            initGraph();
+            graph.computeAllIdeals();
+            computeVisibleObjectsAndAttributes();
+            graph = usedAlgorithm.computeLatticeGraphPositions(graph, screenWidth, screenHeight);
+            
+        } catch (Exception e) {
+            System.err.println("[F1-LATTICE] Error computing lattice: " + e.getMessage());
+            e.printStackTrace();
+            initGraph();
+        }
+        
+        return graph;
+    }
+     
+    /**
+     * (F1) Créer un contexte filtré avec SEULEMENT les attributs sélectionnés
+     * 
+     * @param selectedAttributes Set des attributs à inclure
+     * @param context Le contexte original
+     * @return FormalContext filtré, ou null en cas d'erreur
+     */
+    private static FormalContext createFilteredContextFromSelection(
+            java.util.Set<String> selectedAttributes, FormalContext context) {
+        try {
+            System.out.println("[F1-LATTICE] Creating filtered context with " + selectedAttributes.size() + 
+                              " attributes");
+            
+            // Créer un nouveau contexte vide
+            FormalContext filtered = new FormalContext();
+            
+            // ÉTAPE 1 : Ajouter SEULEMENT les attributs sélectionnés
+            for (String attrName : selectedAttributes) {
+                if (context.existsAttributeAlready(attrName)) {
+                    filtered.addAttribute(attrName);
+                }
+            }
+            
+            // ÉTAPE 2 : Ajouter tous les objets avec les attributs filtrés
+            for (int i = 0; i < context.getObjectCount(); i++) {
+                String objectName = context.getObjectAtIndex(i).getIdentifier();
+                FullObject<String, String> originalObj = context.getObjectAtIndex(i);
+                
+                // Créer l'objet avec les attributs filtrés
+                java.util.Set<String> filteredAttrs = new java.util.HashSet<String>();
+                
+                // Copier les attributs sélectionnés que cet objet possède
+                for (String attr : selectedAttributes) {
+                    if (context.objectHasAttribute(originalObj, attr)) {
+                        filteredAttrs.add(attr);
+                    }
+                }
+                
+                // Créer le nouvel objet
+                FullObject<String, String> newObj = new FullObject<String, String>(objectName, filteredAttrs);
+                filtered.addObject(newObj);
+            }
+            
+            System.out.println("[F1-LATTICE] Filtered context created: " + filtered.getObjectCount() + 
+                              " objects, " + filtered.getAttributeCount() + " attributes");
+            
+            return filtered;
+        } catch (Exception e) {
+            System.err.println("[F1-LATTICE] Error creating filtered context: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+     
+    /**
+     * (F1) Réinitialiser à TOUS les attributs
+     * 
+     * Utile quand l'utilisateur clique "Show All"
+     * 
+     * @param context Le contexte formel
+     * @param bounds Les limites de l'écran
+     * @return Le lattice calculé avec tous les attributs
+     */
+    public static LatticeGraph resetToAllAttributes(FormalContext context, Rectangle bounds) {
+        System.out.println("[F1-LATTICE] Resetting to all attributes");
+        
+        java.util.Set<String> allAttributes = new java.util.HashSet<String>();
+        for (int i = 0; i < context.getAttributeCount(); i++) {
+            allAttributes.add(context.getAttributeAtIndex(i));
+        }
+        
+        return computeLatticeForSelectedAttributes(allAttributes, context, bounds);
+    }
 }

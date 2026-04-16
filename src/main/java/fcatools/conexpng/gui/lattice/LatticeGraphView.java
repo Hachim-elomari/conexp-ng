@@ -150,7 +150,11 @@ public class LatticeGraphView extends JSVGCanvas {
                 g.setStroke(new BasicStroke());
 
                 // draw the label
-                String content = n.getObjectsLabel().elementsToString();
+                
+                // (F1) OPTION A : Formatter avec groupes (GENDER:female)
+                String content = LatticeNodeLabelFormatter.formatAttributesWithGroups(
+                    n.getAttributes(), state.context);
+                
                 g.setFont(font);
                 FontMetrics fm = g.getFontMetrics();
                 Rectangle r = fm.getStringBounds(content, g).getBounds();

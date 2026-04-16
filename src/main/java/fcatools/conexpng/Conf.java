@@ -50,11 +50,18 @@ public class Conf {
 
     private PropertyChangeSupport propertyChangeSupport;
 
-    // (F1) NOUVEAU CHAMP pour Fonctionnalité 1 : Groupes d'Attributs
+    // ═════════════════════════════════════════════════════════════════════════
+    // (F1) NOUVEAUX CHAMPS pour Fonctionnalité 1 : Groupes d'Attributs
+    // ═════════════════════════════════════════════════════════════════════════
+    
     // Stocke l'ID du groupe actuellement sélectionné pour la génération du treillis
     // Si null → générer le treillis pour TOUS les attributs (comportement normal)
     // Si non-null (ex: "group_1") → générer le treillis SEULEMENT pour ce groupe
     private String currentGroupIdForLattice = null;
+    
+    // Stocke l'ensemble des attributs sélectionnés pour l'affichage du treillis
+    // Utilisé par AttributeSelectionPanel pour filtrer les attributs affichés
+    private Set<String> selectedAttributesForLattice = new HashSet<String>();
 
     public Conf() {
         propertyChangeSupport = new PropertyChangeSupport(this);
@@ -255,6 +262,63 @@ public class Conf {
     public void latticeChanged() {
         // Déclencher le recalcul du treillis avec le groupe spécifié
         firePropertyChange(ContextChangeEvents.LATTICECHANGED, null, lattice);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // (F1) NOUVELLES MÉTHODES pour la sélection des attributs dans le lattice
+    // ═════════════════════════════════════════════════════════════════════════
+
+    /**
+     * (F1) Définir l'ensemble des attributs sélectionnés pour l'affichage du treillis
+     * 
+     * Utilisé par AttributeSelectionPanel quand l'utilisateur coche/décoche des attributs.
+     * 
+     * Exemple :
+     * - Utilisateur décoche l'attribut "juvenile" dans le panel
+     * - AttributeSelectionPanel appelle setSelectedAttributesForLattice({adult, female, male})
+     * - LatticeGraphComputer recalcule le treillis avec SEULEMENT ces 3 attributs
+     * 
+     * @param attributes Set d'attributs à sélectionner (ex: {adult, female, male})
+     */
+    public void setSelectedAttributesForLattice(Set<String> attributes) {
+        if (attributes == null) {
+            this.selectedAttributesForLattice = new HashSet<String>();
+        } else {
+            this.selectedAttributesForLattice = new HashSet<String>(attributes);
+        }
+    }
+
+    /**
+     * (F1) Récupérer l'ensemble des attributs sélectionnés pour l'affichage du treillis
+     * 
+     * Utilisé par LatticeGraphComputer pour savoir quels attributs utiliser
+     * dans la génération du treillis filtré.
+     * 
+     * @return Set d'attributs sélectionnés (copie pour éviter les modifications externes)
+     */
+    public Set<String> getSelectedAttributesForLattice() {
+        if (selectedAttributesForLattice == null || selectedAttributesForLattice.isEmpty()) {
+            // Si aucun attribut n'est défini, initialiser avec TOUS les attributs
+            resetSelectedAttributesForLattice();
+        }
+        return new HashSet<String>(selectedAttributesForLattice);
+    }
+
+    /**
+     * (F1) Réinitialiser la sélection des attributs à TOUS les attributs du contexte
+     * 
+     * Utilisé quand :
+     * - L'utilisateur clique sur "Show All" dans le panel des attributs
+     * - Un nouveau contexte est chargé
+     * - L'utilisateur veut revenir au comportement normal (tous les attributs visibles)
+     */
+    public void resetSelectedAttributesForLattice() {
+        selectedAttributesForLattice.clear();
+        if (context != null) {
+            for (int i = 0; i < context.getAttributeCount(); i++) {
+                selectedAttributesForLattice.add(context.getAttributeAtIndex(i));
+            }
+        }
     }
 
     @SuppressWarnings("serial")

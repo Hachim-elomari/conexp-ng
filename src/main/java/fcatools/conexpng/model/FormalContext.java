@@ -25,6 +25,8 @@ import de.tudresden.inf.tcs.fcaapi.utils.IndexedSet;
  * verbose repetition of <String,String>. Plus, adds a couple of useful methods.
  * Due to the API of FormalContext<String,String> the here implemented methods
  * are extremely inefficient.
+ * 
+ * (F1) MODIFIÉ : Auto-assigne les attributs orphelins à des groupes portant leur nom en MAJUSCULES
  */
 
 
@@ -742,7 +744,7 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
         return dontConsideredObj;
     }
 
- // ═════════════════════════════════════════════════════════════
+    // ═════════════════════════════════════════════════════════════
     // FONCTIONNALITÉ 1: GROUPES D'ATTRIBUTS
     // ═════════════════════════════════════════════════════════════
  
@@ -940,5 +942,48 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
         for (String attr : newAttributes) {
             getAttributes().add(attr);
         }
+    }
+
+    /**
+     * (F1) NOUVEAU : Auto-créer des groupes pour les attributs orphelins
+     * 
+     * Si un attribut n'est pas dans un groupe, on crée automatiquement un groupe
+     * avec le nom de l'attribut EN MAJUSCULES
+     * 
+     * Exemple :
+     * - "female" (non-groupé) → crée groupe "FEMALE" contenant "female"
+     * - "adult" (non-groupé) → crée groupe "ADULT" contenant "adult"
+     */
+    public void ensureUngroupedAttributesHaveGroup() {
+        System.out.println("[F1] Vérification des attributs orphelins...");
+        
+        java.util.Collection<String> ungrouped = getUngroupedAttributes();
+        
+        if (ungrouped != null && !ungrouped.isEmpty()) {
+            System.out.println("[F1] Attributs orphelins trouvés : " + ungrouped);
+            
+            for (String attr : ungrouped) {
+                // Créer un groupe avec le nom de l'attribut en MAJUSCULES
+                String groupName = attr.toUpperCase();
+                
+                // Vérifier que le nom de groupe n'existe pas déjà
+                if (!attributeGroupManager.groupNameExists(groupName)) {
+                    System.out.println("[F1] Création du groupe '" + groupName + "' pour l'attribut '" + attr + "'");
+                    String groupId = attributeGroupManager.createGroup(groupName);
+                    if (groupId != null) {
+                        attributeGroupManager.addAttributeToGroup(groupId, attr);
+                    }
+                } else {
+                    System.out.println("[F1] Groupe '" + groupName + "' existe déjà, ajout de l'attribut '" + attr + "'");
+                    // Trouver le groupe et ajouter l'attribut
+                    AttributeGroup group = attributeGroupManager.getGroupByName(groupName);
+                    if (group != null && !group.containsAttribute(attr)) {
+                        attributeGroupManager.addAttributeToGroup(group.getGroupId(), attr);
+                    }
+                }
+            }
+        }
+        
+        System.out.println("[F1] Vérification complète. Groupes totaux : " + attributeGroupManager.getGroupCount());
     }
 }
