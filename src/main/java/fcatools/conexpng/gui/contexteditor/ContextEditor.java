@@ -77,8 +77,8 @@ public class ContextEditor extends View {
         super(state);
         setLayout(new BorderLayout());
 
-        cellPopupMenu       = new WebPopupMenu();
-        objectCellPopupMenu = new WebPopupMenu();
+        cellPopupMenu          = new WebPopupMenu();
+        objectCellPopupMenu    = new WebPopupMenu();
         attributeCellPopupMenu = new WebPopupMenu();
         groupHeaderPopupMenu   = new WebPopupMenu();
 
@@ -157,18 +157,18 @@ public class ContextEditor extends View {
         am.put("selectLeft",  new ExpandSelectionAction(-1, 0));
         am.put("selectRight", new ExpandSelectionAction(+1, 0));
 
-        am.put("renameObject",    new RenameActiveObjectAction());
-        am.put("renameAttribute", new RenameActiveAttributeAction());
-        am.put("removeObject",    new RemoveActiveObjectAction());
-        am.put("removeSelectedObjects", new RemoveSelectedObjectsAction());
-        am.put("removeAttribute", new RemoveActiveAttributeAction());
+        am.put("renameObject",             new RenameActiveObjectAction());
+        am.put("renameAttribute",          new RenameActiveAttributeAction());
+        am.put("removeObject",             new RemoveActiveObjectAction());
+        am.put("removeSelectedObjects",    new RemoveSelectedObjectsAction());
+        am.put("removeAttribute",          new RemoveActiveAttributeAction());
         am.put("removeSelectedAttributes", new RemoveSelectedAttributesAction());
-        am.put("addObjectBelow",     new AddObjectAfterActiveAction());
-        am.put("addObjectAbove",     new AddObjectBeforeActiveAction());
-        am.put("addObjectAtEnd",     new AddObjectAtEndAction());
-        am.put("addAttributeRight",  new AddAttributeAfterActiveAction());
-        am.put("addAttributeLeft",   new AddAttributeBeforeActiveAction());
-        am.put("addAttributeAtEnd",  new AddAttributeAtEndAction());
+        am.put("addObjectBelow",    new AddObjectAfterActiveAction());
+        am.put("addObjectAbove",    new AddObjectBeforeActiveAction());
+        am.put("addObjectAtEnd",    new AddObjectAtEndAction());
+        am.put("addAttributeRight", new AddAttributeAfterActiveAction());
+        am.put("addAttributeLeft",  new AddAttributeBeforeActiveAction());
+        am.put("addAttributeAtEnd", new AddAttributeAtEndAction());
 
         am.put("toggle",  new ToggleActiveAction());
         am.put("invert",  new InvertAction());
@@ -183,11 +183,12 @@ public class ContextEditor extends View {
         am.put("transpose", new TransposeAction());
         am.put("compact",   new CompactAction());
 
-        am.put("groupSelectedAttributes", new GroupSelectedAttributesAction());
-        am.put("ungroupAttribute",        new UngroupAttributeAction());
-        am.put("renameGroup",             new RenameGroupAction());
-        am.put("generateLatticeForGroup", new GenerateLatticeForGroupAction());
-        am.put("toggleGroupExpansion",    new ToggleGroupExpansionAction());
+        am.put("groupSelectedAttributes",   new GroupSelectedAttributesAction());
+        am.put("ungroupAttribute",          new UngroupAttributeAction());
+        am.put("renameGroup",               new RenameGroupAction());
+        am.put("generateLatticeForGroup",   new GenerateLatticeForGroupAction());
+        am.put("toggleGroupExpansion",      new ToggleGroupExpansionAction());
+        am.put("deleteGroupWithAttributes", new DeleteGroupWithAttributesAction());
     }
 
     private void createKeyActions() {
@@ -314,10 +315,11 @@ public class ContextEditor extends View {
     private void createContextMenuActions() {
         ActionMap am = matrix.getActionMap();
 
-        addMenuItem(groupHeaderPopupMenu, "Rename Group", am.get("renameGroup"));
+        addMenuItem(groupHeaderPopupMenu, "Rename Group",              am.get("renameGroup"));
         addMenuItem(groupHeaderPopupMenu, "Generate Lattice for Group", am.get("generateLatticeForGroup"));
         groupHeaderPopupMenu.add(new WebPopupMenu.Separator());
-        addMenuItem(groupHeaderPopupMenu, "Ungroup", am.get("ungroupAttribute"));
+        addMenuItem(groupHeaderPopupMenu, "Ungroup (keep attributes)", am.get("ungroupAttribute"));
+        addMenuItem(groupHeaderPopupMenu, "Delete Group + Attributes", am.get("deleteGroupWithAttributes"));
 
         addMenuItem(cellPopupMenu,
             LocaleHandler.getString("ContextEditor.createContextMenuActions.selectAll"), am.get("selectAll"));
@@ -374,30 +376,67 @@ public class ContextEditor extends View {
         matrix.addMouseMotionListener(mouseAdapter);
     }
 
+    /**
+     * (F1) FIX : Détecte correctement le clic sur row 0 (noms des groupes)
+     * en lisant directement la valeur du modèle à la position cliquée.
+     */
     private void maybeShowPopup(MouseEvent e) {
         int i = matrix.rowAtPoint(e.getPoint());
         int j = matrix.columnAtPoint(e.getPoint());
         lastActiveRowIndex    = i;
         lastActiveColumnIndex = j;
-        if (e.isPopupTrigger()) {
-            if (i == 0 && j == 0) {
-                // coin : rien
-            } else if (i > 1 && j > 0) {
-                if (matrix.getSelectedColumn() <= 0 || matrix.getSelectedRow() <= 1) {
-                    matrix.selectCell(i, j);
-                }
-                cellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
-            } else if (j == 0) {
-                objectCellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
-            } else {
-                AttributeGroup group = matrixModel.getGroupAtColumn(j);
-                if (group != null) groupHeaderPopupMenu.show(e.getComponent(), e.getX(), e.getY());
-                else attributeCellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+
+        if (!e.isPopupTrigger()) return;
+
+        // Coin (0,0) : rien
+        if (i == 0 && j == 0) return;
+
+        // Données (row >= 2, col >= 1)
+        if (i > 1 && j > 0) {
+            if (matrix.getSelectedColumn() <= 0 || matrix.getSelectedRow() <= 1) {
+                matrix.selectCell(i, j);
             }
+            cellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+            return;
+        }
+
+        // Colonne 0 (noms des objets, row >= 2)
+        if (j == 0 && i > 1) {
+            objectCellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+            return;
+        }
+
+        // (F1) FIX : Row 0 = ligne des groupes
+        // On lit le nom du groupe directement depuis le modèle
+        if (i == 0 && j > 0) {
+            Object val = matrixModel.getValueAt(0, j);
+            String groupName = (val != null) ? val.toString().trim() : "";
+            if (!groupName.isEmpty()) {
+                groupHeaderPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+            }
+            return;
+        }
+
+        // Row 1 = ligne des attributs → menu attribut
+        if (i == 1 && j > 0) {
+            attributeCellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
         }
     }
 
+    /**
+     * (F1) Helper : retrouver le groupe cliqué à partir de lastActiveColumnIndex.
+     * On lit la valeur en row 0 pour avoir le nom du groupe, puis on cherche par nom.
+     */
+    private AttributeGroup getClickedGroup() {
+        Object val = matrixModel.getValueAt(0, lastActiveColumnIndex);
+        String groupName = (val != null) ? val.toString().trim() : "";
+        if (groupName.isEmpty()) return null;
+        return state.context.getAttributeGroupManager().getGroupByName(groupName);
+    }
+
+    // =========================================================================
     // Actions
+    // =========================================================================
 
     class CombineActions extends AbstractAction {
         Action first, second;
@@ -411,21 +450,19 @@ public class ContextEditor extends View {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
             matrix.saveSelection();
-            int lastActiveRowIndexAfter = clamp(lastActiveRowIndex + vertical, 2, state.context.getObjectCount() + 1);
+            int lastActiveRowIndexAfter    = clamp(lastActiveRowIndex    + vertical,   2, state.context.getObjectCount() + 1);
             int lastActiveColumnIndexAfter = clamp(lastActiveColumnIndex + horizontal, 1, state.context.getAttributeCount());
-            boolean wasRowChange = (lastActiveRowIndexAfter - lastActiveRowIndex) != 0;
+            boolean wasRowChange    = (lastActiveRowIndexAfter    - lastActiveRowIndex)    != 0;
             boolean wasColumnChange = (lastActiveColumnIndexAfter - lastActiveColumnIndex) != 0;
-            boolean isNewRowIndexInsideOldSelection = lastActiveRowIndexAfter >= matrix.getLastSelectedRowsStartIndex()
-                    && lastActiveRowIndexAfter <= matrix.getLastSelectedRowsEndIndex();
-            boolean isNewColumnIndexInsideOldSelection = lastActiveColumnIndexAfter >= matrix.getLastSelectedColumnsStartIndex()
-                    && lastActiveColumnIndexAfter <= matrix.getLastSelectedColumnsEndIndex();
+            boolean isNewRowInsideOld    = lastActiveRowIndexAfter    >= matrix.getLastSelectedRowsStartIndex()    && lastActiveRowIndexAfter    <= matrix.getLastSelectedRowsEndIndex();
+            boolean isNewColInsideOld    = lastActiveColumnIndexAfter >= matrix.getLastSelectedColumnsStartIndex() && lastActiveColumnIndexAfter <= matrix.getLastSelectedColumnsEndIndex();
             if (wasRowChange) {
-                if (isNewRowIndexInsideOldSelection) matrix.removeRowSelectionInterval(lastActiveRowIndex, lastActiveRowIndex);
+                if (isNewRowInsideOld) matrix.removeRowSelectionInterval(lastActiveRowIndex, lastActiveRowIndex);
                 else matrix.addRowSelectionInterval(lastActiveRowIndexAfter, lastActiveRowIndexAfter);
                 lastActiveRowIndex = lastActiveRowIndexAfter;
             }
             if (wasColumnChange) {
-                if (isNewColumnIndexInsideOldSelection) matrix.removeColumnSelectionInterval(lastActiveColumnIndex, lastActiveColumnIndex);
+                if (isNewColInsideOld) matrix.removeColumnSelectionInterval(lastActiveColumnIndex, lastActiveColumnIndex);
                 else matrix.addColumnSelectionInterval(lastActiveColumnIndexAfter, lastActiveColumnIndexAfter);
                 lastActiveColumnIndex = lastActiveColumnIndexAfter;
             }
@@ -437,21 +474,19 @@ public class ContextEditor extends View {
         MoveObjectOrAttributeAction(int horizontal, int vertical) { this.horizontal = horizontal; this.vertical = vertical; }
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            int lastActiveRowIndexAfter = clamp(lastActiveRowIndex + vertical, 1, state.context.getObjectCount());
-            int lastActiveColumnIndexAfter = clamp(lastActiveColumnIndex + horizontal, 1, state.context.getAttributeCount());
-            boolean wasRowChange = (lastActiveRowIndexAfter - lastActiveRowIndex) != 0;
-            boolean wasColumnChange = (lastActiveColumnIndexAfter - lastActiveColumnIndex) != 0;
-            if (wasRowChange) {
-                matrixModel.reorderRows(lastActiveRowIndex, lastActiveRowIndexAfter);
+            int rowAfter = clamp(lastActiveRowIndex    + vertical,   1, state.context.getObjectCount());
+            int colAfter = clamp(lastActiveColumnIndex + horizontal, 1, state.context.getAttributeCount());
+            if ((rowAfter - lastActiveRowIndex) != 0) {
+                matrixModel.reorderRows(lastActiveRowIndex, rowAfter);
                 matrixModel.fireTableDataChanged();
-                lastActiveRowIndex = lastActiveRowIndexAfter;
+                lastActiveRowIndex = rowAfter;
                 matrix.selectCell(lastActiveRowIndex, lastActiveColumnIndex);
                 matrix.saveSelection();
             }
-            if (wasColumnChange) {
-                matrixModel.reorderColumns(lastActiveColumnIndex, lastActiveColumnIndexAfter);
+            if ((colAfter - lastActiveColumnIndex) != 0) {
+                matrixModel.reorderColumns(lastActiveColumnIndex, colAfter);
                 matrixModel.fireTableDataChanged();
-                lastActiveColumnIndex = lastActiveColumnIndexAfter;
+                lastActiveColumnIndex = colAfter;
                 matrix.selectCell(lastActiveRowIndex, lastActiveColumnIndex);
                 matrix.saveSelection();
             }
@@ -463,7 +498,7 @@ public class ContextEditor extends View {
         MoveAction(int horizontal, int vertical) { this.horizontal = horizontal; this.vertical = vertical; }
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            lastActiveRowIndex    = clamp(lastActiveRowIndex + vertical, 2, state.context.getObjectCount() + 1);
+            lastActiveRowIndex    = clamp(lastActiveRowIndex    + vertical,   2, state.context.getObjectCount() + 1);
             lastActiveColumnIndex = clamp(lastActiveColumnIndex + horizontal, 1, state.context.getAttributeCount());
             matrix.selectCell(lastActiveRowIndex, lastActiveColumnIndex);
         }
@@ -478,10 +513,10 @@ public class ContextEditor extends View {
             int i = lastActiveRowIndex + vertical - 1;
             int j = lastActiveColumnIndex + horizontal - 1;
             while (true) {
-                if (i < 0) { j -= 1; i = state.context.getObjectCount() - 1; break; }
-                if (j < 0) { i -= 1; j = state.context.getAttributeCount() - 1; }
-                if (i >= state.context.getObjectCount()) { j += 1; i = 0; break; }
-                if (j >= state.context.getAttributeCount()) { i += 1; j = 0; }
+                if (i < 0) { j--; i = state.context.getObjectCount() - 1; break; }
+                if (j < 0) { i--; j = state.context.getAttributeCount() - 1; }
+                if (i >= state.context.getObjectCount())    { j++; i = 0; break; }
+                if (j >= state.context.getAttributeCount()) { i++; j = 0; }
                 break;
             }
             i = mod(i, state.context.getObjectCount());
@@ -499,7 +534,7 @@ public class ContextEditor extends View {
             if (matrix.isRenaming) return;
             if (i <= 1 || j <= 0) return;
             int i = clamp(this.i - 2, 0, state.context.getObjectCount() - 1);
-            int j = clamp(this.j, 1, state.context.getAttributeCount()) - 1;
+            int j = clamp(this.j,     1, state.context.getAttributeCount()) - 1;
             state.saveConf();
             state.context.toggleAttributeForObject(
                 state.context.getAttributeAtIndex(j),
@@ -536,7 +571,7 @@ public class ContextEditor extends View {
     abstract class AbstractFillClearInvertAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            int i1 = matrix.getSelectedRow() - 1;
+            int i1 = matrix.getSelectedRow()    - 1;
             int i2 = i1 + matrix.getSelectedRowCount();
             int j1 = matrix.getSelectedColumn() - 1;
             int j2 = j1 + matrix.getSelectedColumnCount();
@@ -641,7 +676,7 @@ public class ContextEditor extends View {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
             invokeAction(ContextEditor.this, new AddAttributeAtAction(lastActiveColumnIndex));
-            lastActiveColumnIndex += 1;
+            lastActiveColumnIndex++;
             matrix.selectCell(lastActiveRowIndex, lastActiveColumnIndex);
             matrix.saveSelection();
         }
@@ -663,7 +698,7 @@ public class ContextEditor extends View {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
             invokeAction(ContextEditor.this, new AddObjectAtAction(lastActiveRowIndex));
-            lastActiveRowIndex += 1;
+            lastActiveRowIndex++;
             matrix.selectCell(lastActiveRowIndex, lastActiveColumnIndex);
             matrix.saveSelection();
         }
@@ -776,7 +811,9 @@ public class ContextEditor extends View {
         public void actionPerformed(ActionEvent e) {}
     }
 
+    // =========================================================================
     // (F1) Actions groupes
+    // =========================================================================
 
     class GroupSelectedAttributesAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
@@ -821,49 +858,73 @@ public class ContextEditor extends View {
         }
     }
 
+    /**
+     * Ungroup : détache les attributs du groupe mais les CONSERVE dans le contexte.
+     */
     class UngroupAttributeAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            java.util.List<AttributeGroup> allGroups = new java.util.ArrayList<AttributeGroup>(
-                state.context.getAllAttributeGroups());
-            if (allGroups.isEmpty()) {
-                JOptionPane.showMessageDialog(ContextEditor.this, "No attribute groups to ungroup!",
-                    "No Groups", JOptionPane.INFORMATION_MESSAGE);
+            // (F1) FIX : récupérer le groupe via le nom dans le modèle
+            AttributeGroup group = getClickedGroup();
+            if (group == null) {
+                JOptionPane.showMessageDialog(ContextEditor.this,
+                    "No group found at this position.", "No Group", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
-            java.util.List<String> options = new java.util.ArrayList<String>();
-            java.util.Map<String, AttributeGroup> groupMap = new java.util.HashMap<String, AttributeGroup>();
-            for (AttributeGroup group : allGroups) {
-                String label = group.getGroupName() + " (" + group.getAttributeCount() + " attributes)";
-                options.add(label); groupMap.put(label, group);
-            }
-            String[] optionsArray = options.toArray(new String[0]);
-            String selected = (String) JOptionPane.showInputDialog(ContextEditor.this,
-                "Select a group to ungroup:", "Ungroup Attributes", JOptionPane.QUESTION_MESSAGE,
-                null, optionsArray, optionsArray[0]);
-            if (selected == null) return;
-            AttributeGroup selectedGroup = groupMap.get(selected);
-            if (selectedGroup == null) return;
             int confirm = JOptionPane.showConfirmDialog(ContextEditor.this,
-                "Remove group '" + selectedGroup.getGroupName() + "' and ungroup " +
-                selectedGroup.getAttributeCount() + " attributes?",
+                "Detach all attributes from group '" + group.getGroupName() + "'?\n" +
+                "The attributes will be kept in the context.",
                 "Confirm Ungroup", JOptionPane.YES_NO_OPTION);
             if (confirm != JOptionPane.YES_OPTION) return;
             state.saveConf();
-            state.context.removeAttributeGroup(selectedGroup.getGroupId());
+            state.context.removeAttributeGroup(group.getGroupId());
             matrixModel.fireTableStructureChanged();
             matrix.invalidate(); matrix.repaint();
             state.contextChanged(); state.getContextEditorUndoManager().makeRedoable();
-            JOptionPane.showMessageDialog(ContextEditor.this,
-                "Group '" + selectedGroup.getGroupName() + "' has been removed.",
-                "Ungroup Successful", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
+    /**
+     * (F1) NOUVEAU : Supprimer un groupe ET tous ses attributs du contexte.
+     */
+    class DeleteGroupWithAttributesAction extends AbstractAction {
+        public void actionPerformed(ActionEvent e) {
+            if (matrix.isRenaming) return;
+            // (F1) FIX : récupérer le groupe via le nom dans le modèle
+            AttributeGroup group = getClickedGroup();
+            if (group == null) {
+                JOptionPane.showMessageDialog(ContextEditor.this,
+                    "No group found at this position.", "No Group", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            java.util.List<String> attrsToDelete = new java.util.ArrayList<String>(group.getAttributeNames());
+            int confirm = JOptionPane.showConfirmDialog(ContextEditor.this,
+                "Delete group '" + group.getGroupName() + "' and its " + attrsToDelete.size() + " attribute(s):\n" +
+                attrsToDelete.toString() + "\n\nWARNING: Attributes will be permanently removed from ALL objects!",
+                "Delete Group + Attributes",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+            if (confirm != JOptionPane.YES_OPTION) return;
+            state.saveConf();
+            // Supprimer chaque attribut du contexte
+            for (String attr : attrsToDelete) {
+                state.context.removeAttribute(attr);
+            }
+            // Supprimer le groupe
+            state.context.removeAttributeGroup(group.getGroupId());
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate(); matrix.repaint();
+            state.contextChanged(); state.getContextEditorUndoManager().makeRedoable();
+        }
+    }
+
+    /**
+     * (F1) FIX : récupère le groupe par nom depuis la position cliquée
+     */
     class RenameGroupAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            AttributeGroup group = matrixModel.getGroupAtColumn(lastActiveColumnIndex);
+            AttributeGroup group = getClickedGroup();
             if (group == null) return;
             String newName = JOptionPane.showInputDialog(ContextEditor.this, "Enter new group name:",
                 group.getGroupName(), JOptionPane.QUESTION_MESSAGE);
@@ -880,7 +941,7 @@ public class ContextEditor extends View {
     class ToggleGroupExpansionAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            AttributeGroup group = matrixModel.getGroupAtColumn(lastActiveColumnIndex);
+            AttributeGroup group = getClickedGroup();
             if (group == null) return;
             matrixModel.toggleGroupExpansion(group.getGroupId());
             matrix.invalidate(); matrix.repaint();
@@ -895,9 +956,9 @@ public class ContextEditor extends View {
             java.util.Collection<String> ungroupedAttrs = state.context.getUngroupedAttributes();
             java.util.List<String> options = new java.util.ArrayList<String>();
             java.util.Map<String, AttributeGroup> groupMap = new java.util.HashMap<String, AttributeGroup>();
-            for (AttributeGroup group : allGroups) {
-                String label = group.getGroupName() + " (" + group.getAttributeCount() + " attributes)";
-                options.add(label); groupMap.put(label, group);
+            for (AttributeGroup g : allGroups) {
+                String label = g.getGroupName() + " (" + g.getAttributeCount() + " attributes)";
+                options.add(label); groupMap.put(label, g);
             }
             for (String attr : ungroupedAttrs) {
                 options.add(attr + " (single attribute)");
@@ -914,10 +975,7 @@ public class ContextEditor extends View {
                 JOptionPane.QUESTION_MESSAGE, null, optionsArray, optionsArray[0]);
             if (selected == null) return;
             AttributeGroup selectedGroup = groupMap.get(selected);
-            if (selectedGroup == null) {
-                state.setCurrentGroupIdForLattice(null);
-                state.contextChanged(); return;
-            }
+            if (selectedGroup == null) { state.setCurrentGroupIdForLattice(null); state.contextChanged(); return; }
             state.setCurrentGroupIdForLattice(selectedGroup.getGroupId());
             state.contextChanged();
             JOptionPane.showMessageDialog(ContextEditor.this,
@@ -926,7 +984,9 @@ public class ContextEditor extends View {
         }
     }
 
+    // =========================================================================
     // Helpers
+    // =========================================================================
 
     private void addAttributeAt(final int i) {
         String name = "attr" + i;
@@ -953,7 +1013,7 @@ public class ContextEditor extends View {
     private class AttributeSelectionDialog extends JDialog {
         private boolean confirmed = false;
         private java.util.Set<String> selectedAttributes = new java.util.HashSet<String>();
-        private java.util.List<JCheckBox> checkboxes = new java.util.ArrayList<JCheckBox>();
+        private java.util.List<JCheckBox> checkboxes     = new java.util.ArrayList<JCheckBox>();
 
         public AttributeSelectionDialog(ContextEditor contextEditor, java.util.List<String> availableAttributes) {
             super(SwingUtilities.getWindowAncestor(contextEditor),
@@ -990,7 +1050,7 @@ public class ContextEditor extends View {
             setLocationRelativeTo(contextEditor);
         }
 
-        public boolean isConfirmed() { return confirmed; }
+        public boolean isConfirmed()                         { return confirmed; }
         public java.util.Set<String> getSelectedAttributes() { return selectedAttributes; }
     }
 }
