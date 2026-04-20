@@ -20,33 +20,23 @@ import static javax.swing.KeyStroke.getKeyStroke;
 import fcatools.conexpng.model.AttributeGroup;
 import java.util.List;
 
-/**
- * ContextMatrix is simply a customisation of JTable in order to make it look &
- * behave more like a spreadsheet editor resp. ConExp's context editor. The code
- * is intricate, a bit ugly and uses quite a few snippets from various sources
- * from the internet (see below). That is just because of the way JTable is
- * designed - it is not meant to be too flexible.
- * 
- * (F1) ÉTAPE 2 : Modifié pour afficher 2 lignes d'en-têtes
- * - Ligne 0 : noms des GROUPES
- * - Ligne 1 : noms des ATTRIBUTS
- * - Data à partir de ligne 2
- * 
- * PRECONDITION: Expects a model that extends 'AbstractTableModel' and
- * implements 'Reordarable'! TODO: Overwrite setTableModel to assert for that
- */
 public class ContextMatrix extends JTable {
 
     private static final long serialVersionUID = -7474568014425724962L;
 
-    private static final Color HEADER_COLOR_START = new Color(235, 235, 235);
-    private static final Color HEADER_COLOR_END = new Color(213, 213, 213);
-    private static final Color GROUP_HEADER_COLOR = new Color(200, 200, 200);
+    private static final Color HEADER_COLOR_START    = new Color(235, 235, 235);
+    private static final Color HEADER_COLOR_END      = new Color(213, 213, 213);
+    private static final Color GROUP_HEADER_COLOR    = new Color(200, 200, 200);
     private static final Color HEADER_SEPARATOR_COLOR = new Color(170, 170, 170);
-    private static final Color DRAGGING_COLOR = HEADER_COLOR_START;
-    private static final Color EVEN_ROW_COLOR = new Color(252, 252, 252);
-    private static final Color ODD_ROW_COLOR = new Color(255, 255, 255);
-    private static final Color TABLE_GRID_COLOR = new Color(120, 120, 120);
+    private static final Color DRAGGING_COLOR        = HEADER_COLOR_START;
+    private static final Color EVEN_ROW_COLOR        = new Color(252, 252, 252);
+    private static final Color ODD_ROW_COLOR         = new Color(255, 255, 255);
+    private static final Color TABLE_GRID_COLOR      = new Color(120, 120, 120);
+
+    // (F1) Couleurs pour la fusion des groupes
+    private static final Color GROUP_BG     = new Color(180, 210, 255);
+    private static final Color GROUP_FG     = new Color(0, 51, 102);
+    private static final Color GROUP_BORDER = new Color(100, 150, 200);
 
     public ContextMatrix(TableModel dm, Map<Integer, Integer> columnWidths) {
         super(dm);
@@ -65,28 +55,23 @@ public class ContextMatrix extends JTable {
         setupCustomRenderer();
     }
 
-    // (F1) ÉTAPE 2 : Custom renderer pour les lignes 0 et 1
     private void setupCustomRenderer() {
         DefaultTableCellRenderer customRenderer = new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable table, Object value,
                     boolean isSelected, boolean hasFocus, int row, int column) {
                 super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-                
                 setHorizontalAlignment(JLabel.CENTER);
-                
                 if (row == 0) {
-                    // LIGNE DES GROUPES : fond gris foncé, BOLD
                     setBackground(GROUP_HEADER_COLOR);
                     setFont(getFont().deriveFont(Font.BOLD));
                     setForeground(Color.BLACK);
+                    setText(""); // (F1) Toujours vide : paint() s'en charge
                 } else if (row == 1) {
-                    // LIGNE DES ATTRIBUTS : fond gris clair, normal
                     setBackground(HEADER_COLOR_START);
                     setFont(getFont().deriveFont(Font.PLAIN));
                     setForeground(Color.BLACK);
                 } else {
-                    // DATA : style alterné
                     if (isSelected) {
                         setBackground(table.getSelectionBackground());
                         setForeground(table.getSelectionForeground());
@@ -95,16 +80,89 @@ public class ContextMatrix extends JTable {
                         setForeground(Color.BLACK);
                     }
                 }
-                
                 setOpaque(true);
                 return this;
             }
         };
-        
         setDefaultRenderer(Object.class, customRenderer);
     }
 
-    // Create our custom viewport into which our custom JTable will be inserted
+    // =========================================================================
+    // (F1) VRAIE FUSION : paint() dessine les cellules fusionnées par-dessus
+    // =========================================================================
+
+    @Override
+    public void paint(Graphics g) {
+        super.paint(g); // JTable dessine normalement d'abord
+
+        // Ensuite on dessine les cellules fusionnées PAR-DESSUS
+        if (getModel() instanceof ContextMatrixModel) {
+            ContextMatrixModel model = (ContextMatrixModel) getModel();
+            if (model.isDisplayWithGroups()) {
+                paintMergedGroupCells((Graphics2D) g, model);
+            }
+        }
+    }
+
+    private void paintMergedGroupCells(Graphics2D g2d, ContextMatrixModel model) {
+        int colCount = getColumnCount();
+        int col = 1; // Ignorer colonne 0 (noms des objets)
+
+        while (col < colCount) {
+            Object val = model.getValueAt(0, col);
+            String groupName = (val != null) ? val.toString().trim() : "";
+
+            if (groupName.isEmpty()) {
+                col++;
+                continue;
+            }
+
+            // Trouver la dernière colonne de ce groupe
+            int lastCol = col;
+            for (int next = col + 1; next < colCount; next++) {
+                Object nextVal = model.getValueAt(0, next);
+                String nextGroup = (nextVal != null) ? nextVal.toString().trim() : "";
+                if (nextGroup.equals(groupName)) {
+                    lastCol = next;
+                } else {
+                    break;
+                }
+            }
+
+            // Rectangle fusionné
+            Rectangle r1 = getCellRect(0, col, true);
+            Rectangle r2 = getCellRect(0, lastCol, true);
+            int x      = r1.x;
+            int y      = r1.y;
+            int width  = r2.x + r2.width - r1.x;
+            int height = r1.height;
+
+            // Fond
+            g2d.setColor(GROUP_BG);
+            g2d.fillRect(x, y, width, height);
+
+            // Bordure
+            g2d.setColor(GROUP_BORDER);
+            g2d.drawRect(x, y, width - 1, height - 1);
+
+            // Texte centré
+            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g2d.setFont(new Font("Arial", Font.BOLD, 12));
+            g2d.setColor(GROUP_FG);
+            FontMetrics fm = g2d.getFontMetrics();
+            int textX = x + (width  - fm.stringWidth(groupName)) / 2;
+            int textY = y + (height + fm.getAscent() - fm.getDescent()) / 2;
+            g2d.drawString(groupName, textX, textY);
+
+            col = lastCol + 1;
+        }
+    }
+
+    // =========================================================================
+    // Reste du code original inchangé
+    // =========================================================================
+
     public WebScrollPane createStripedJScrollPane(Color bg) {
         WebScrollPane scrollPane = new WebScrollPane(this);
         scrollPane.setViewport(new StripedViewport(this, bg));
@@ -113,7 +171,6 @@ public class ContextMatrix extends JTable {
         return scrollPane;
     }
 
-    // For correct rendering of table after data changes
     @Override
     public void tableChanged(TableModelEvent e) {
         super.tableChanged(e);
@@ -122,8 +179,6 @@ public class ContextMatrix extends JTable {
         makeHeaderCellsEditable();
     }
 
-    // For removing standard JTable keybindings that would not fit this
-    // customised JTable
     private void clearKeyBindings() {
         int[] is = { JComponent.WHEN_IN_FOCUSED_WINDOW, JComponent.WHEN_FOCUSED,
                 JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT };
@@ -138,14 +193,11 @@ public class ContextMatrix extends JTable {
             im.put(getKeyStroke(KeyEvent.VK_LEFT, KeyEvent.SHIFT_MASK), "none");
             im.put(getKeyStroke(KeyEvent.VK_RIGHT, KeyEvent.SHIFT_MASK), "none");
             im.put(getKeyStroke(KeyEvent.VK_DOWN, KeyEvent.SHIFT_MASK), "none");
-            if (i == is.length)
-                break;
-            // noinspection MagicConstant
+            if (i == is.length) break;
             im = getInputMap(is[i]);
         }
     }
 
-    // For centering text inside cells
     private void alignCells() {
         DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
         centerRenderer.setHorizontalAlignment(JLabel.CENTER);
@@ -154,21 +206,12 @@ public class ContextMatrix extends JTable {
         }
     }
 
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Selecting
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // For preventing a selection to disappear after an operation like "invert"
     private int lastSelectedRowsStartIndex;
     private int lastSelectedRowsEndIndex;
     private int lastSelectedColumnsStartIndex;
     public int lastSelectedColumnsEndIndex;
 
-    /*
-     * For allowing a programmatical cell selection (i.e. not only through
-     * mouse/keyboard events)
-     * (F1) ÉTAPE 2 : Clamp à partir de 2 (ligne 0 et 1 réservées)
-     */
     public void selectCell(int row, int column) {
         row = clamp(row, 2, getRowCount() - 1);
         column = clamp(column, 1, getColumnCount() - 1);
@@ -176,19 +219,16 @@ public class ContextMatrix extends JTable {
         setColumnSelectionInterval(column, column);
     }
 
-    /* Programmatically select a row */
     public void selectRow(int row) {
         setRowSelectionInterval(row, row);
         setColumnSelectionInterval(1, this.getColumnCount() - 1);
     }
 
-    /* Programmatically select a column */
     public void selectColumn(int column) {
         setColumnSelectionInterval(column, column);
         setRowSelectionInterval(2, this.getRowCount() - 1);
     }
 
-    /* For preventing a selection to disappear after an operation like "invert" */
     public void saveSelection() {
         lastSelectedRowsStartIndex = getSelectedRow();
         lastSelectedRowsEndIndex = getSelectedRowCount() - 1 + lastSelectedRowsStartIndex;
@@ -196,61 +236,48 @@ public class ContextMatrix extends JTable {
         lastSelectedColumnsEndIndex = getSelectedColumnCount() - 1 + lastSelectedColumnsStartIndex;
     }
 
-    /* For preventing a selection to disappear after an operation like "invert" */
     public void restoreSelection() {
-        if (getRowCount() <= 2 || getColumnCount() <= 1)
-            return;
+        if (getRowCount() <= 2 || getColumnCount() <= 1) return;
         if ((lastSelectedColumnsEndIndex <= 0 && lastSelectedColumnsStartIndex <= 0)
-                || (lastSelectedRowsEndIndex <= 1 && lastSelectedRowsStartIndex <= 1))
-            return;
-        lastSelectedRowsStartIndex = clamp(lastSelectedRowsStartIndex, 2, getRowCount() - 1);
-        lastSelectedRowsEndIndex = clamp(lastSelectedRowsEndIndex, 2, getRowCount() - 1);
+                || (lastSelectedRowsEndIndex <= 1 && lastSelectedRowsStartIndex <= 1)) return;
+        lastSelectedRowsStartIndex    = clamp(lastSelectedRowsStartIndex, 2, getRowCount() - 1);
+        lastSelectedRowsEndIndex      = clamp(lastSelectedRowsEndIndex, 2, getRowCount() - 1);
         lastSelectedColumnsStartIndex = clamp(lastSelectedColumnsStartIndex, 1, getColumnCount() - 1);
-        lastSelectedColumnsEndIndex = clamp(lastSelectedColumnsEndIndex, 1, getColumnCount() - 1);
+        lastSelectedColumnsEndIndex   = clamp(lastSelectedColumnsEndIndex, 1, getColumnCount() - 1);
         setRowSelectionInterval(lastSelectedRowsStartIndex, lastSelectedRowsEndIndex);
         setColumnSelectionInterval(lastSelectedColumnsStartIndex, lastSelectedColumnsEndIndex);
     }
 
     public boolean wasColumnSelected(int j) {
         return (lastSelectedColumnsEndIndex == j && lastSelectedColumnsStartIndex == j
-                && Math.min(lastSelectedRowsStartIndex, lastSelectedRowsEndIndex) == 2 && Math.max(
-                lastSelectedRowsStartIndex, lastSelectedRowsEndIndex) == getRowCount() - 1);
+                && Math.min(lastSelectedRowsStartIndex, lastSelectedRowsEndIndex) == 2
+                && Math.max(lastSelectedRowsStartIndex, lastSelectedRowsEndIndex) == getRowCount() - 1);
     }
 
     public boolean wasRowSelected(int i) {
         return (lastSelectedRowsEndIndex == i && lastSelectedRowsStartIndex == i
-                && Math.min(lastSelectedColumnsStartIndex, lastSelectedColumnsEndIndex) == 1 && Math.max(
-                lastSelectedColumnsStartIndex, lastSelectedColumnsEndIndex) == getColumnCount() - 1);
+                && Math.min(lastSelectedColumnsStartIndex, lastSelectedColumnsEndIndex) == 1
+                && Math.max(lastSelectedColumnsStartIndex, lastSelectedColumnsEndIndex) == getColumnCount() - 1);
     }
 
     public boolean wasAllSelected() {
         return (Math.min(lastSelectedRowsEndIndex, lastSelectedRowsStartIndex) == 2
                 && Math.max(lastSelectedRowsEndIndex, lastSelectedRowsStartIndex) == getRowCount() - 1
-                && Math.min(lastSelectedColumnsStartIndex, lastSelectedColumnsEndIndex) == 1 && Math.max(
-                lastSelectedColumnsStartIndex, lastSelectedColumnsEndIndex) == getColumnCount() - 1);
+                && Math.min(lastSelectedColumnsStartIndex, lastSelectedColumnsEndIndex) == 1
+                && Math.max(lastSelectedColumnsStartIndex, lastSelectedColumnsEndIndex) == getColumnCount() - 1);
     }
 
-    /*
-     * Overridden as header cells should *not* be selected when selecting all
-     * cells
-     */
     @Override
     public void selectAll() {
         setRowSelectionInterval(2, getRowCount() - 1);
         setColumnSelectionInterval(1, getColumnCount() - 1);
     }
 
-    /*
-     * Overridden as header cells should *not* be selectable through mouse
-     * clicks / keyboard events
-     * (F1) ÉTAPE 2 : Exclure lignes 0 et 1
-     */
     @Override
     public boolean isCellSelected(int i, int j) {
         return i > 1 && j != 0 && super.isCellSelected(i, j);
     }
 
-    /* For correct painting of table when selecting something */
     @Override
     public Component prepareRenderer(TableCellRenderer renderer, int row, int column) {
         Component component = super.prepareRenderer(renderer, row, column);
@@ -260,40 +287,23 @@ public class ContextMatrix extends JTable {
         return component;
     }
 
-    public int getLastSelectedRowsStartIndex() {
-        return lastSelectedRowsStartIndex;
-    }
+    public int getLastSelectedRowsStartIndex()    { return lastSelectedRowsStartIndex; }
+    public int getLastSelectedRowsEndIndex()      { return lastSelectedRowsEndIndex; }
+    public int getLastSelectedColumnsStartIndex() { return lastSelectedColumnsStartIndex; }
+    public int getLastSelectedColumnsEndIndex()   { return lastSelectedColumnsEndIndex; }
 
-    public int getLastSelectedRowsEndIndex() {
-        return lastSelectedRowsEndIndex;
-    }
-
-    public int getLastSelectedColumnsStartIndex() {
-        return lastSelectedColumnsStartIndex;
-    }
-
-    public int getLastSelectedColumnsEndIndex() {
-        return lastSelectedColumnsEndIndex;
-    }
-
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Renaming
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // For preventing keyboard shortcuts to fire when entering a name
     public boolean isRenaming = false;
 
-    // For being able to rename headers
     private void makeHeaderCellsEditable() {
         for (int i = 0; i < getColumnCount(); i++) {
             getColumnModel().getColumn(i).setCellEditor(editor);
         }
     }
 
-    // (F1) ÉTAPE 2 : Modifier pour éditer ligne 1 (attributs) au lieu de 0
     public JTextField renameColumnHeader(int i) {
         isRenaming = true;
-        editCellAt(1, i);  // Ligne 1 (attributs)
+        editCellAt(1, i);
         requestFocus();
         ContextCellEditor ed = (ContextCellEditor) editor;
         ed.getTextField().requestFocus();
@@ -311,11 +321,8 @@ public class ContextMatrix extends JTable {
         return ed.getTextField();
     }
 
-    // For enabling renaming of headers
     TableCellEditor editor = new ContextCellEditor(new JTextField());
 
-    // Custom cell editor. Needed for renaming of objects/attributes
-    // (F1) ÉTAPE 2 : Modifier pour tenir compte du décalage de 2
     @SuppressWarnings("serial")
     public class ContextCellEditor extends DefaultCellEditor {
 
@@ -331,19 +338,21 @@ public class ContextMatrix extends JTable {
         }
 
         @Override
-        public Component getTableCellEditorComponent(JTable table, Object value, boolean isSelected, int row, int column) {
-            JTextField f = (JTextField) super.getTableCellEditorComponent(table, value, isSelected, row, column);
+        public Component getTableCellEditorComponent(JTable table, Object value,
+                boolean isSelected, int row, int column) {
+            JTextField f = (JTextField) super.getTableCellEditorComponent(
+                    table, value, isSelected, row, column);
             model = (ContextMatrixModel) table.getModel();
             String text;
             if (column == 0) {
-                text = model.getObjectNameAt(row - 2);  // Décalage -2
+                text = model.getObjectNameAt(row - 2);
             } else {
                 text = model.getAttributeNameAt(column - 1);
             }
             f.setText(text);
-            lastName = text;
+            lastName   = text;
             lastColumn = column;
-            lastRow = row;
+            lastRow    = row;
             this.textField = f;
             return f;
         }
@@ -360,20 +369,14 @@ public class ContextMatrix extends JTable {
             return super.getCellEditorValue();
         }
 
-        public JTextField getTextField() {
-            return textField;
-        }
+        public JTextField getTextField() { return textField; }
     }
 
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Dragging
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // For dragging logic
     private static Cursor dragCursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
-    boolean isDraggingRow = false;
+    boolean isDraggingRow    = false;
     boolean isDraggingColumn = false;
-    boolean didReorderOccur = false;
+    boolean didReorderOccur  = false;
     int lastDraggedRowIndex;
     int lastDraggedColumnIndex;
 
@@ -383,10 +386,9 @@ public class ContextMatrix extends JTable {
             public void mousePressed(MouseEvent e) {
                 int i = rowAtPoint(e.getPoint());
                 int j = columnAtPoint(e.getPoint());
-                lastDraggedRowIndex = i;
+                lastDraggedRowIndex    = i;
                 lastDraggedColumnIndex = j;
                 if (!isResizing) {
-                    // (F1) ÉTAPE 2 : Exclure les lignes 0 et 1 du dragging
                     if (SwingUtilities.isLeftMouseButton(e) && j == 0 && i > 1) {
                         isDraggingRow = true;
                         setCursor(dragCursor);
@@ -402,18 +404,14 @@ public class ContextMatrix extends JTable {
                 Reorderable model = (Reorderable) getModel();
                 int i = rowAtPoint(e.getPoint());
                 int j = columnAtPoint(e.getPoint());
-                if (i < 0 || j < 0)
-                    return;
-                if (isDraggingRow || isDraggingColumn)
-                    clearSelection();
-                // A reorder of rows occured
+                if (i < 0 || j < 0) return;
+                if (isDraggingRow || isDraggingColumn) clearSelection();
                 if (isDraggingRow && i != lastDraggedRowIndex && i > 1) {
                     model.reorderRows(lastDraggedRowIndex, i);
                     ((AbstractTableModel) getModel()).fireTableDataChanged();
                     lastDraggedRowIndex = i;
                     didReorderOccur = true;
                 }
-                // A reorder of columns occured
                 if (isDraggingColumn && j != lastDraggedColumnIndex && j != 0) {
                     Rectangle selected = getCellRect(0, lastDraggedColumnIndex, false);
                     Rectangle r = getCellRect(0, j, false);
@@ -430,37 +428,28 @@ public class ContextMatrix extends JTable {
             }
 
             public void mouseReleased(MouseEvent e) {
-                // For selecting entire row/column when clicking on a header
                 int i = rowAtPoint(e.getPoint());
                 int j = columnAtPoint(e.getPoint());
                 if (!isResizing && !didReorderOccur) {
-                    // (F1) ÉTAPE 2 : Exclure les lignes 0 et 1
                     if (SwingUtilities.isLeftMouseButton(e) && j == 0 && i > 1) {
-                        if (!wasRowSelected(i))
-                            selectRow(i);
-                        else
-                            clearSelection();
+                        if (!wasRowSelected(i)) selectRow(i);
+                        else clearSelection();
                     }
                     if (SwingUtilities.isLeftMouseButton(e) && (i == 0 || i == 1) && j > 0) {
-                        if (!wasColumnSelected(j))
-                            selectColumn(j);
-                        else
-                            clearSelection();
+                        if (!wasColumnSelected(j)) selectColumn(j);
+                        else clearSelection();
                     }
                     if (SwingUtilities.isLeftMouseButton(e) && (i == 0 || i == 1) && j == 0) {
-                        if (!wasAllSelected())
-                            selectAll();
-                        else
-                            clearSelection();
+                        if (!wasAllSelected()) selectAll();
+                        else clearSelection();
                     }
                 }
-
                 if ((isDraggingRow || isDraggingColumn) && getCursor().equals(dragCursor))
                     setCursor(Cursor.getDefaultCursor());
-                isDraggingRow = false;
+                isDraggingRow    = false;
                 isDraggingColumn = false;
-                didReorderOccur = false;
-                isResizing = false;
+                didReorderOccur  = false;
+                isResizing       = false;
                 saveSelection();
                 invalidate();
                 repaint();
@@ -470,11 +459,8 @@ public class ContextMatrix extends JTable {
         addMouseMotionListener(mouseAdapter);
     }
 
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Resizing
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    public static final int DEFAULT_COLUMN_WIDTH = 80;
+    public static final int DEFAULT_COLUMN_WIDTH   = 80;
     public static final int COMPACTED_COLUMN_WIDTH = 15;
     private static Cursor resizeCursor = Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR);
     public Map<Integer, Integer> columnWidths;
@@ -482,7 +468,7 @@ public class ContextMatrix extends JTable {
     private int mouseXOffset;
     private TableColumn resizingColumn;
     private boolean isCompacted = false;
-    private boolean isResizing = false;
+    private boolean isResizing  = false;
 
     public void compact() {
         isCompacted = true;
@@ -504,27 +490,18 @@ public class ContextMatrix extends JTable {
     }
 
     public void restoreColumnWidths() {
-        if (columnWidths == null)
-            return;
+        if (columnWidths == null) return;
         if (!isCompacted) {
             for (int i = 0; i < getColumnCount(); i++) {
                 Integer w = columnWidths.get(i);
                 TableColumn t = getColumnModel().getColumn(i);
-                if (w == null) {
-                    t.setPreferredWidth(DEFAULT_COLUMN_WIDTH);
-                } else {
-                    t.setPreferredWidth(w);
-                }
+                t.setPreferredWidth(w == null ? DEFAULT_COLUMN_WIDTH : w);
             }
         } else {
             for (int i = 1; i < getColumnCount(); i++) {
                 Integer w = compactedColumnWidths.get(i);
                 TableColumn t = getColumnModel().getColumn(i);
-                if (w == null) {
-                    t.setPreferredWidth(COMPACTED_COLUMN_WIDTH);
-                } else {
-                    t.setPreferredWidth(w);
-                }
+                t.setPreferredWidth(w == null ? COMPACTED_COLUMN_WIDTH : w);
             }
         }
     }
@@ -534,43 +511,33 @@ public class ContextMatrix extends JTable {
             columnWidths.remove(removedIndex);
             for (int i = removedIndex + 1; i < getColumnCount() + 20; i++) {
                 Integer oldWidth = columnWidths.remove(i);
-                if (oldWidth == null)
-                    continue;
-                if (i == 1)
-                    continue;
+                if (oldWidth == null) continue;
+                if (i == 1) continue;
                 columnWidths.put(i - 1, oldWidth);
             }
         } else {
             compactedColumnWidths.remove(removedIndex);
             for (int i = removedIndex + 1; i < getColumnCount() + 20; i++) {
                 Integer oldWidth = compactedColumnWidths.remove(i);
-                if (oldWidth == null)
-                    continue;
-                if (i == 1)
-                    continue;
+                if (oldWidth == null) continue;
+                if (i == 1) continue;
                 compactedColumnWidths.put(i - 1, oldWidth);
             }
         }
     }
 
     public void switchColumnWidths(int from, int to) {
-        Integer fromVal, toVal;
-
-        fromVal = columnWidths.get(from);
-        toVal = columnWidths.get(to);
-        if (fromVal == null)
-            fromVal = ContextMatrix.DEFAULT_COLUMN_WIDTH;
-        if (toVal == null)
-            toVal = ContextMatrix.DEFAULT_COLUMN_WIDTH;
+        Integer fromVal = columnWidths.get(from);
+        Integer toVal   = columnWidths.get(to);
+        if (fromVal == null) fromVal = DEFAULT_COLUMN_WIDTH;
+        if (toVal   == null) toVal   = DEFAULT_COLUMN_WIDTH;
         columnWidths.put(to, fromVal);
         columnWidths.put(from, toVal);
 
         fromVal = compactedColumnWidths.get(from);
-        toVal = compactedColumnWidths.get(to);
-        if (fromVal == null)
-            fromVal = ContextMatrix.COMPACTED_COLUMN_WIDTH;
-        if (toVal == null)
-            toVal = ContextMatrix.COMPACTED_COLUMN_WIDTH;
+        toVal   = compactedColumnWidths.get(to);
+        if (fromVal == null) fromVal = COMPACTED_COLUMN_WIDTH;
+        if (toVal   == null) toVal   = COMPACTED_COLUMN_WIDTH;
         compactedColumnWidths.put(to, fromVal);
         compactedColumnWidths.put(from, toVal);
     }
@@ -582,11 +549,9 @@ public class ContextMatrix extends JTable {
             public void mousePressed(MouseEvent e) {
                 Point p = e.getPoint();
                 int index = matrix.columnAtPoint(p);
-                if (index == -1)
-                    return;
+                if (index == -1) return;
                 TableColumn resizingColumn = getResizingColumn(p, index);
-                if (resizingColumn == null)
-                    return;
+                if (resizingColumn == null) return;
                 matrix.resizingColumn = resizingColumn;
                 mouseXOffset = p.x - resizingColumn.getWidth();
                 matrix.restoreSelection();
@@ -594,11 +559,8 @@ public class ContextMatrix extends JTable {
             }
 
             public void mouseMoved(MouseEvent e) {
-                if (getResizingColumn(e.getPoint()) != null) {
-                    setCursor(resizeCursor);
-                } else {
-                    setCursor(Cursor.getDefaultCursor());
-                }
+                if (getResizingColumn(e.getPoint()) != null) setCursor(resizeCursor);
+                else setCursor(Cursor.getDefaultCursor());
             }
 
             public void mouseDragged(MouseEvent e) {
@@ -610,29 +572,26 @@ public class ContextMatrix extends JTable {
                     int newWidth = Math.max(mouseX - mouseXOffset, 20);
                     resizingColumn.setWidth(newWidth);
                     resizingColumn.setPreferredWidth(newWidth);
-                    if (!isCompacted) {
-                        columnWidths.put(resizingColumn.getModelIndex(), newWidth);
-                    } else {
-                        compactedColumnWidths.put(resizingColumn.getModelIndex(), newWidth);
-                    }
+                    if (!isCompacted) columnWidths.put(resizingColumn.getModelIndex(), newWidth);
+                    else compactedColumnWidths.put(resizingColumn.getModelIndex(), newWidth);
                     restoreSelection();
 
                     Container container;
-                    if ((matrix.getParent() == null) || ((container = matrix.getParent().getParent()) == null)
-                            || !(container instanceof JScrollPane)) {
-                        return;
-                    }
+                    if ((matrix.getParent() == null)
+                            || ((container = matrix.getParent().getParent()) == null)
+                            || !(container instanceof JScrollPane)) return;
 
                     JViewport viewport = ((JScrollPane) container).getViewport();
-                    int viewportWidth = viewport.getWidth();
-                    int diff = newWidth - oldWidth;
+                    int viewportWidth  = viewport.getWidth();
+                    int diff           = newWidth - oldWidth;
                     int newHeaderWidth = matrix.getWidth() + diff;
 
                     Dimension tableSize = matrix.getSize();
                     tableSize.width += diff;
                     matrix.setSize(tableSize);
 
-                    if ((newHeaderWidth >= viewportWidth) && (matrix.getAutoResizeMode() == JTable.AUTO_RESIZE_OFF)) {
+                    if ((newHeaderWidth >= viewportWidth)
+                            && (matrix.getAutoResizeMode() == JTable.AUTO_RESIZE_OFF)) {
                         Point p = viewport.getViewPosition();
                         p.x = Math.max(0, Math.min(newHeaderWidth - viewportWidth, p.x + diff));
                         viewport.setViewPosition(p);
@@ -652,20 +611,15 @@ public class ContextMatrix extends JTable {
             }
 
             private TableColumn getResizingColumn(Point p, int column) {
-                if (column == -1)
-                    return null;
+                if (column == -1) return null;
                 int row = rowAtPoint(p);
-                // (F1) ÉTAPE 2 : Accepter resizing sur lignes 0 et 1
-                if (row != 0 && row != 1)
-                    return null;
+                if (row != 0 && row != 1) return null;
                 Rectangle r = getCellRect(row, column, true);
                 r.grow(-3, 0);
-                if (r.contains(p))
-                    return null;
-                int midPoint = r.x + r.width / 2;
+                if (r.contains(p)) return null;
+                int midPoint   = r.x + r.width / 2;
                 int columnIndex = (p.x < midPoint) ? column - 1 : column;
-                if (columnIndex == -1)
-                    return null;
+                if (columnIndex == -1) return null;
                 return getColumnModel().getColumn(columnIndex);
             }
         };
@@ -673,10 +627,7 @@ public class ContextMatrix extends JTable {
         addMouseMotionListener(columnResizeMouseAdapter);
     }
 
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Drawing
-    // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
     private class StripedViewport extends JViewport {
 
         private static final long serialVersionUID = 171992496170114834L;
@@ -701,9 +652,7 @@ public class ContextMatrix extends JTable {
 
         private PropertyChangeListener createTableColumnWidthListener() {
             return new PropertyChangeListener() {
-                public void propertyChange(PropertyChangeEvent evt) {
-                    repaint();
-                }
+                public void propertyChange(PropertyChangeEvent evt) { repaint(); }
             };
         }
 
@@ -725,17 +674,17 @@ public class ContextMatrix extends JTable {
 
         private void paintBackground(Graphics g) {
             g.setColor(BACKGROUND_COLOR);
-            g.fillRect(g.getClipBounds().x, g.getClipBounds().y, g.getClipBounds().width, g.getClipBounds().height);
+            g.fillRect(g.getClipBounds().x, g.getClipBounds().y,
+                       g.getClipBounds().width, g.getClipBounds().height);
         }
 
         private void paintStripedBackground(Graphics g) {
-            int rowHeight = fTable.getRowHeight();
+            int rowHeight  = fTable.getRowHeight();
             int tableWidth = fTable.getWidth();
-            int offsetX = getViewPosition().x;
-            int offsetY = getViewPosition().y;
+            int offsetX    = getViewPosition().x;
+            int offsetY    = getViewPosition().y;
             int x = -offsetX;
             int y = -offsetY;
-            // (F1) ÉTAPE 2 : Commencer à j=2 (sauter les 2 lignes d'en-têtes)
             for (int j = 2; j < fTable.getRowCount(); j++) {
                 g.setColor((j % 2 == 0) ? EVEN_ROW_COLOR : ODD_ROW_COLOR);
                 g.fillRect(x, y + j * rowHeight, tableWidth, rowHeight);
@@ -746,46 +695,43 @@ public class ContextMatrix extends JTable {
             Graphics2D g = (Graphics2D) g0;
             int firstColumnWidth = fTable.getColumnModel().getColumn(0).getWidth();
             int rowHeight = fTable.getRowHeight();
-            int offsetX = getViewPosition().x;
-            int offsetY = getViewPosition().y;
+            int offsetX   = getViewPosition().x;
+            int offsetY   = getViewPosition().y;
             int x = -offsetX;
             int y = -offsetY;
 
-            GradientPaint gp = new GradientPaint(0, 0, HEADER_COLOR_END, firstColumnWidth, 0, HEADER_COLOR_START);
+            GradientPaint gp = new GradientPaint(0, 0, HEADER_COLOR_END,
+                                                 firstColumnWidth, 0, HEADER_COLOR_START);
             g.setPaint(gp);
-            // (F1) ÉTAPE 2 : Peindre à partir de j=2
             for (int j = 2; j < fTable.getRowCount(); j++) {
                 g.fillRect(x, y + j * rowHeight, firstColumnWidth, rowHeight);
             }
-
             if (isDraggingRow) {
                 g.setColor(new Color(230, 230, 230));
                 g.fillRect(x, y + lastDraggedRowIndex * rowHeight + 1, firstColumnWidth, rowHeight - 1);
             }
-
             g.setColor(HEADER_SEPARATOR_COLOR);
-            // (F1) ÉTAPE 2 : Peindre les lignes à partir de j=2
             for (int j = 2; j < fTable.getRowCount() + 1; j++) {
                 g.drawLine(x + 3, y + j * rowHeight, x + firstColumnWidth - 4, y + j * rowHeight);
             }
         }
 
-        // (F1) ÉTAPE 2 : Modifié pour peindre 2 lignes d'en-têtes (groupes + attributs)
         private void paintHorizontalHeaderBackground(Graphics g0) {
             Graphics2D g = (Graphics2D) g0;
             int tableWidth = fTable.getWidth();
-            int rowHeight = fTable.getRowHeight();
-            int offsetX = getViewPosition().x;
-            int offsetY = getViewPosition().y;
+            int rowHeight  = fTable.getRowHeight();
+            int offsetX    = getViewPosition().x;
+            int offsetY    = getViewPosition().y;
             int x = -offsetX;
             int y = -offsetY;
-            
-            // LIGNE 0 : Noms des GROUPES (fond gris foncé)
+
+            // Ligne 0 : Noms des GROUPES
             g.setColor(GROUP_HEADER_COLOR);
             g.fillRect(x, y, tableWidth, rowHeight);
-            
-            // LIGNE 1 : Noms des ATTRIBUTS (fond gris clair)
-            GradientPaint gp = new GradientPaint(0, rowHeight, HEADER_COLOR_START, 0, 2 * rowHeight, HEADER_COLOR_END);
+
+            // Ligne 1 : Noms des ATTRIBUTS
+            GradientPaint gp = new GradientPaint(0, rowHeight, HEADER_COLOR_START,
+                                                 0, 2 * rowHeight, HEADER_COLOR_END);
             g.setPaint(gp);
             g.fillRect(x, y + rowHeight, tableWidth, rowHeight);
 
@@ -805,39 +751,32 @@ public class ContextMatrix extends JTable {
                 columnWidth += fTable.getColumnModel().getColumn(j - 1).getWidth();
                 g.drawLine(x + columnWidth - 1, y + 1, x + columnWidth - 1, y + 2 * rowHeight - 3);
             }
-            
-            // Ligne horizontale de séparation entre les 2 en-têtes
             g.setColor(HEADER_SEPARATOR_COLOR);
             g.drawLine(x, y + rowHeight, x + tableWidth, y + rowHeight);
         }
 
-        // (F1) ÉTAPE 2 : Modifié pour tenir compte des 2 lignes d'en-têtes
         private void paintGridLines(Graphics g) {
-            int tableHeight = fTable.getHeight();
-            int rowHeight = fTable.getRowHeight();
+            int tableHeight      = fTable.getHeight();
+            int rowHeight        = fTable.getRowHeight();
             int firstColumnWidth = fTable.getColumnModel().getColumn(0).getWidth();
-            int offsetX = getViewPosition().x;
-            int offsetY = getViewPosition().y;
+            int offsetX          = getViewPosition().x;
+            int offsetY          = getViewPosition().y;
             int x = -offsetX;
             int y = -offsetY;
             g.setColor(TABLE_GRID_COLOR);
-            
-            // Vertical lines
+
             for (int i = 0; i < fTable.getColumnCount(); i++) {
                 TableColumn column = fTable.getColumnModel().getColumn(i);
                 x += column.getWidth();
-                // Commencer à 2 * rowHeight (après les 2 lignes d'en-têtes)
                 g.drawLine(x - 1, y + 2 * rowHeight, x - 1, y + tableHeight);
             }
             g.drawLine(x - 1, y, x - 1, y + tableHeight);
-            
-            // Horizontal lines (commencer à j=2)
+
             for (int j = 2; j < fTable.getRowCount() + 1; j++) {
                 g.drawLine(-offsetX + firstColumnWidth, y + j * rowHeight, x - 1, y + j * rowHeight);
             }
-            g.drawLine(-offsetX, y + fTable.getRowCount() * rowHeight, x - 1, y + fTable.getRowCount() * rowHeight);
+            g.drawLine(-offsetX, y + fTable.getRowCount() * rowHeight,
+                        x - 1,  y + fTable.getRowCount() * rowHeight);
         }
-
     }
-
 }
