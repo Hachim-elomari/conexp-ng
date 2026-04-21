@@ -183,14 +183,15 @@ public class ContextEditor extends View {
         am.put("transpose", new TransposeAction());
         am.put("compact",   new CompactAction());
 
-        am.put("groupSelectedAttributes",   new GroupSelectedAttributesAction());
-        am.put("ungroupAttribute",          new UngroupAttributeAction());
-        am.put("renameGroup",               new RenameGroupAction());
-        am.put("generateLatticeForGroup",   new GenerateLatticeForGroupAction());
-        am.put("toggleGroupExpansion",      new ToggleGroupExpansionAction());
-        am.put("deleteGroupWithAttributes", new DeleteGroupWithAttributesAction());
+        am.put("groupSelectedAttributes",    new GroupSelectedAttributesAction());
+        am.put("ungroupAttribute",           new UngroupAttributeAction());
+        am.put("renameGroup",                new RenameGroupAction());
+        am.put("generateLatticeForGroup",    new GenerateLatticeForGroupAction());
+        am.put("toggleGroupExpansion",       new ToggleGroupExpansionAction());
+        am.put("deleteGroupWithAttributes",  new DeleteGroupWithAttributesAction());
+        am.put("addAttributesToGroup",       new AddAttributesToGroupAction());
         // (F1) NOUVEAU
-        am.put("addAttributesToGroup",      new AddAttributesToGroupAction());
+        am.put("removeAttributesFromGroup",  new RemoveAttributesFromGroupAction());
     }
 
     private void createKeyActions() {
@@ -317,13 +318,14 @@ public class ContextEditor extends View {
     private void createContextMenuActions() {
         ActionMap am = matrix.getActionMap();
 
-        addMenuItem(groupHeaderPopupMenu, "Rename Group",               am.get("renameGroup"));
-        addMenuItem(groupHeaderPopupMenu, "Generate Lattice for Group", am.get("generateLatticeForGroup"));
-        // (F1) NOUVEAU : ajouter des attributs au groupe
+        addMenuItem(groupHeaderPopupMenu, "Rename Group",                  am.get("renameGroup"));
+        addMenuItem(groupHeaderPopupMenu, "Generate Lattice for Group",    am.get("generateLatticeForGroup"));
         addMenuItem(groupHeaderPopupMenu, "Add Attribute(s) to this Group", am.get("addAttributesToGroup"));
+        // (F1) NOUVEAU
+        addMenuItem(groupHeaderPopupMenu, "Remove Attribute(s) from this Group", am.get("removeAttributesFromGroup"));
         groupHeaderPopupMenu.add(new WebPopupMenu.Separator());
-        addMenuItem(groupHeaderPopupMenu, "Ungroup (keep attributes)",  am.get("ungroupAttribute"));
-        addMenuItem(groupHeaderPopupMenu, "Delete Group + Attributes",  am.get("deleteGroupWithAttributes"));
+        addMenuItem(groupHeaderPopupMenu, "Ungroup (keep attributes)",     am.get("ungroupAttribute"));
+        addMenuItem(groupHeaderPopupMenu, "Delete Group + Attributes",     am.get("deleteGroupWithAttributes"));
 
         addMenuItem(cellPopupMenu,
             LocaleHandler.getString("ContextEditor.createContextMenuActions.selectAll"), am.get("selectAll"));
@@ -353,6 +355,7 @@ public class ContextEditor extends View {
 
         addMenuItem(attributeCellPopupMenu,
             LocaleHandler.getString("ContextEditor.createContextMenuActions.renameAttribute"), am.get("renameAttribute"));
+        // (F1) FIX : "Remove" appelle removeAttribute, qui est maintenant corrigé
         addMenuItem(attributeCellPopupMenu,
             LocaleHandler.getString("ContextEditor.createContextMenuActions.removeAttribute"), am.get("removeAttribute"));
         addMenuItem(attributeCellPopupMenu,
@@ -403,6 +406,7 @@ public class ContextEditor extends View {
             return;
         }
 
+        // Row 0 = noms des groupes
         if (i == 0 && j > 0) {
             Object val = matrixModel.getValueAt(0, j);
             String groupName = (val != null) ? val.toString().trim() : "";
@@ -412,16 +416,36 @@ public class ContextEditor extends View {
             return;
         }
 
+        // Row 1 = noms des attributs
         if (i == 1 && j > 0) {
             attributeCellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
         }
     }
 
+    /**
+     * Helper : retrouver le groupe cliqué à partir de lastActiveColumnIndex.
+     */
     private AttributeGroup getClickedGroup() {
         Object val = matrixModel.getValueAt(0, lastActiveColumnIndex);
         String groupName = (val != null) ? val.toString().trim() : "";
         if (groupName.isEmpty()) return null;
         return state.context.getAttributeGroupManager().getGroupByName(groupName);
+    }
+
+    /**
+     * (F1) Helper : retrouver le nom de l'attribut à la colonne cliquée (row 1).
+     * Utilise getAttributeAtVisualColumn pour supporter le mode groupes.
+     */
+    private String getClickedAttributeName() {
+        // getAttributeAtVisualColumn retourne l'attribut réel à la colonne visuelle
+        String attr = matrixModel.getAttributeAtVisualColumn(lastActiveColumnIndex);
+        if (attr != null) return attr;
+        // Fallback : mode sans groupes
+        int idx = lastActiveColumnIndex - 1;
+        if (idx >= 0 && idx < state.context.getAttributeCount()) {
+            return state.context.getAttributeAtIndex(idx);
+        }
+        return null;
     }
 
     // =========================================================================
@@ -722,7 +746,9 @@ public class ContextEditor extends View {
     class RenameActiveAttributeAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming || state.context.getObjectCount() == 0) return;
-            final String name = state.context.getAttributeAtIndex(lastActiveColumnIndex - 1);
+            // (F1) FIX : utiliser getClickedAttributeName() pour le bon attribut en mode groupes
+            final String name = getClickedAttributeName();
+            if (name == null) return;
             final JTextField t = matrix.renameColumnHeader(lastActiveColumnIndex);
             Timer timer = new Timer(0, new ActionListener() {
                 public void actionPerformed(ActionEvent e) { t.setText(name); t.selectAll(); }
@@ -746,13 +772,33 @@ public class ContextEditor extends View {
         }
     }
 
+    /**
+     * (F1) FIX : Utilise getClickedAttributeName() pour trouver le bon attribut
+     * même en mode groupes (où l'ordre visuel ≠ ordre interne).
+     */
     class RemoveActiveAttributeAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming || state.context.getAttributeCount() == 0) return;
-            matrix.saveSelection(); state.saveConf();
-            state.context.removeAttribute(state.context.getAttributeAtIndex(lastActiveColumnIndex - 1));
+
+            // FIX : récupérer l'attribut réel à la colonne visuelle cliquée
+            String attrName = getClickedAttributeName();
+            if (attrName == null) return;
+
+            matrix.saveSelection();
+            state.saveConf();
+
+            // Retirer l'attribut de son groupe éventuel
+            AttributeGroup group = state.context.getGroupForAttribute(attrName);
+            if (group != null) {
+                state.context.getAttributeGroupManager()
+                    .removeAttributeFromGroup(group.getGroupId(), attrName);
+            }
+
+            // Supprimer l'attribut du contexte
+            state.context.removeAttribute(attrName);
             matrix.updateColumnWidths(lastActiveColumnIndex);
             if (lastActiveColumnIndex - 1 >= state.context.getAttributeCount()) lastActiveColumnIndex--;
+
             matrixModel.fireTableStructureChanged();
             matrix.invalidate(); matrix.repaint(); matrix.restoreSelection();
             state.contextChanged(); state.getContextEditorUndoManager().makeRedoable();
@@ -849,22 +895,15 @@ public class ContextEditor extends View {
         }
     }
 
-    /**
-     * (F1) NOUVEAU : Ajouter des attributs non groupés à un groupe existant.
-     */
     class AddAttributesToGroupAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-
-            // Récupérer le groupe cible (celui sur lequel on a fait clic droit)
             AttributeGroup group = getClickedGroup();
             if (group == null) {
                 JOptionPane.showMessageDialog(ContextEditor.this,
                     "No group found at this position.", "No Group", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
-
-            // Récupérer les attributs sans groupe
             java.util.Collection<String> ungrouped = state.context.getUngroupedAttributes();
             if (ungrouped.isEmpty()) {
                 JOptionPane.showMessageDialog(ContextEditor.this,
@@ -872,38 +911,82 @@ public class ContextEditor extends View {
                     "No Free Attributes", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
-
-            // Afficher le dialog de sélection
             AttributeSelectionDialog dialog = new AttributeSelectionDialog(
                 ContextEditor.this,
                 "Select attributes to add to group '" + group.getGroupName() + "':",
                 new java.util.ArrayList<String>(ungrouped));
             dialog.setVisible(true);
-
             if (!dialog.isConfirmed()) return;
-
             java.util.Set<String> selected = dialog.getSelectedAttributes();
             if (selected.isEmpty()) {
                 JOptionPane.showMessageDialog(ContextEditor.this,
                     "No attributes selected.", "No Selection", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-
-            // Ajouter les attributs sélectionnés au groupe
             state.saveConf();
             for (String attr : selected) {
                 state.context.getAttributeGroupManager().addAttributeToGroup(group.getGroupId(), attr);
             }
-
-            // Réorganiser pour que les attributs du groupe soient côte à côte
             state.context.reorganizeAttributesForGroups();
             matrixModel.fireTableStructureChanged();
             matrix.invalidate(); matrix.repaint();
             state.contextChanged(); state.getContextEditorUndoManager().makeRedoable();
-
             JOptionPane.showMessageDialog(ContextEditor.this,
                 selected.size() + " attribute(s) added to group '" + group.getGroupName() + "'.",
                 "Success", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    /**
+     * (F1) NOUVEAU : Supprimer des attributs sélectionnés D'UN GROUPE
+     * (suppression définitive du contexte, pas juste un détachement).
+     */
+    class RemoveAttributesFromGroupAction extends AbstractAction {
+        public void actionPerformed(ActionEvent e) {
+            if (matrix.isRenaming) return;
+            AttributeGroup group = getClickedGroup();
+            if (group == null) {
+                JOptionPane.showMessageDialog(ContextEditor.this,
+                    "No group found at this position.", "No Group", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            java.util.List<String> groupAttrs = new java.util.ArrayList<String>(group.getAttributeNames());
+            if (groupAttrs.isEmpty()) {
+                JOptionPane.showMessageDialog(ContextEditor.this,
+                    "Group '" + group.getGroupName() + "' has no attributes.",
+                    "Empty Group", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            // Afficher les checkboxes avec les attributs du groupe
+            AttributeSelectionDialog dialog = new AttributeSelectionDialog(
+                ContextEditor.this,
+                "Select attributes to permanently DELETE from group '" + group.getGroupName() + "':",
+                groupAttrs);
+            dialog.setVisible(true);
+            if (!dialog.isConfirmed()) return;
+            java.util.Set<String> toDelete = dialog.getSelectedAttributes();
+            if (toDelete.isEmpty()) {
+                JOptionPane.showMessageDialog(ContextEditor.this,
+                    "No attributes selected.", "No Selection", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            // Confirmation
+            int confirm = JOptionPane.showConfirmDialog(ContextEditor.this,
+                "Detach " + toDelete.size() + " attribute(s) from group '"
+                + group.getGroupName() + "':\n" + toDelete.toString()
+                + "\n\nThe attributes will remain in the context (ungrouped).",
+                "Confirm Remove from Group",
+                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            if (confirm != JOptionPane.YES_OPTION) return;
+            state.saveConf();
+            // Détacher les attributs du groupe SEULEMENT (ils restent dans le contexte)
+            for (String attr : toDelete) {
+                state.context.getAttributeGroupManager()
+                    .removeAttributeFromGroup(group.getGroupId(), attr);
+            }
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate(); matrix.repaint();
+            state.contextChanged(); state.getContextEditorUndoManager().makeRedoable();
         }
     }
 
@@ -945,9 +1028,7 @@ public class ContextEditor extends View {
                 "Delete Group + Attributes", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
             if (confirm != JOptionPane.YES_OPTION) return;
             state.saveConf();
-            for (String attr : attrsToDelete) {
-                state.context.removeAttribute(attr);
-            }
+            for (String attr : attrsToDelete) { state.context.removeAttribute(attr); }
             state.context.removeAttributeGroup(group.getGroupId());
             matrixModel.fireTableStructureChanged();
             matrix.invalidate(); matrix.repaint();
@@ -1043,10 +1124,6 @@ public class ContextEditor extends View {
         });
     }
 
-    /**
-     * Dialog réutilisable pour sélectionner des attributs via des checkboxes.
-     * Le label est paramétrable pour l'utiliser dans différents contextes.
-     */
     @SuppressWarnings("serial")
     private class AttributeSelectionDialog extends JDialog {
         private boolean confirmed = false;
@@ -1068,7 +1145,7 @@ public class ContextEditor extends View {
                 checkboxes.add(cb); checkboxPanel.add(cb);
             }
             JScrollPane sp = new JScrollPane(checkboxPanel);
-            sp.setPreferredSize(new Dimension(300, 200));
+            sp.setPreferredSize(new Dimension(320, 200));
             mainPanel.add(sp, BorderLayout.CENTER);
             JPanel buttonPanel = new JPanel();
             JButton ok = new JButton("OK");
