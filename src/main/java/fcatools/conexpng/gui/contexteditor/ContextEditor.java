@@ -1022,9 +1022,16 @@ public class ContextEditor extends View {
                 return;
             }
             java.util.List<String> attrsToDelete = new java.util.ArrayList<String>(group.getAttributeNames());
+            int count = attrsToDelete.size();
+
+            // Si >= 10 attributs : afficher seulement le nombre, pas la liste
+            String attrDetails = (count < 10)
+                ? attrsToDelete.toString()
+                : count + " attributes (too many to list)";
+
             int confirm = JOptionPane.showConfirmDialog(ContextEditor.this,
-                "Delete group '" + group.getGroupName() + "' and its " + attrsToDelete.size() + " attribute(s):\n" +
-                attrsToDelete.toString() + "\n\nWARNING: Attributes will be permanently removed from ALL objects!",
+                "Delete group '" + group.getGroupName() + "' and its " + count + " attribute(s):\n" +
+                attrDetails + "\n\nWARNING: Attributes will be permanently removed from ALL objects!",
                 "Delete Group + Attributes", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
             if (confirm != JOptionPane.YES_OPTION) return;
             state.saveConf();
