@@ -164,18 +164,16 @@ public class LatticeSettings extends WebAccordion {
     }
 
     private WebScrollPane getAttributePanel() {
-        WebPanel mainPanel = new WebPanel(new BorderLayout(5, 5));
-        mainPanel.setMargin(10, 10, 10, 10);
+        // Même structure que getObjectPanel() : panel simple avec GridBagLayout
+        // + boutons en haut dans un panel séparé
+        WebPanel outerPanel = new WebPanel(new BorderLayout());
 
-        // ── Déterminer si des groupes existent ─────────────────────────────
         boolean hasGroups = context.getAllAttributeGroups() != null
                             && !context.getAllAttributeGroups().isEmpty();
 
-        // ── BOUTONS ────────────────────────────────────────────────────────
-        WebPanel buttonsPanel = new WebPanel(new GridLayout(2, 2, 3, 3));
-        buttonsPanel.setMargin(5, 5, 5, 5);
+        // ── BOUTONS (même style que Objects) ──────────────────────────────
+        WebPanel buttonsPanel = new WebPanel(new GridLayout(0, 2, 3, 3));
 
-        // Switch visible SEULEMENT s'il y a des groupes
         switchModeButton = new WebButton(withGroups ? "Switch to Attributes" : "Switch to Groups");
         switchModeButton.setVisible(hasGroups);
         switchModeButton.addActionListener(new ActionListener() {
@@ -184,7 +182,7 @@ public class LatticeSettings extends WebAccordion {
                 update(state);
             }
         });
-        buttonsPanel.add(switchModeButton);
+        if (hasGroups) buttonsPanel.add(switchModeButton);
 
         WebButton showAllButton = new WebButton("Show All");
         showAllButton.addActionListener(new ActionListener() {
@@ -207,33 +205,23 @@ public class LatticeSettings extends WebAccordion {
             }
         });
         buttonsPanel.add(hideAllButton);
-        buttonsPanel.add(new WebPanel());
 
-        mainPanel.add(buttonsPanel, BorderLayout.NORTH);
+        outerPanel.add(buttonsPanel, BorderLayout.NORTH);
 
-        // ── CONTENU ────────────────────────────────────────────────────────
-        WebPanel contentPanel = new WebPanel(new GridBagLayout());
-        contentPanel.setMargin(10, 15, 10, 15);
-
+        // ── CONTENU (même structure que getObjectPanel) ───────────────────
+        WebPanel panel = new WebPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.anchor    = GridBagConstraints.WEST;
-        gbc.gridx     = 0;
-        gbc.gridy     = 0;
-        gbc.fill      = GridBagConstraints.HORIZONTAL;
-        gbc.weightx   = 1.0;
-        gbc.insets    = new java.awt.Insets(2, 5, 2, 5);
+        gbc.anchor  = GridBagConstraints.WEST;
+        gbc.gridx   = 0;
+        gbc.gridy   = 0;
 
-        GridBagConstraints gbcAttr = new GridBagConstraints();
-        gbcAttr.anchor  = GridBagConstraints.WEST;
-        gbcAttr.gridx   = 0;
-        gbcAttr.fill    = GridBagConstraints.HORIZONTAL;
-        gbcAttr.weightx = 1.0;
-        gbcAttr.insets  = new java.awt.Insets(2, 30, 2, 5);
+        GridBagConstraints gbcSub = new GridBagConstraints();
+        gbcSub.anchor = GridBagConstraints.WEST;
+        gbcSub.gridx  = 0;
+        gbcSub.insets = new java.awt.Insets(0, 20, 0, 0);
 
         if (!hasGroups) {
-            // ═══════════════════════════════════════════════════════════════
-            // CAS : AUCUN GROUPE → liste plate simple (comme le panel Objets)
-            // ═══════════════════════════════════════════════════════════════
+            // ── AUCUN GROUPE : liste plate (identique au panel Objets) ─────
             for (int i = 0; i < context.getAttributeCount(); i++) {
                 final String attrName = context.getAttributeAtIndex(i);
                 gbc.gridy++;
@@ -246,21 +234,18 @@ public class LatticeSettings extends WebAccordion {
                         state.temporaryContextChanged();
                     }
                 });
-                contentPanel.add(cb, gbc);
+                panel.add(cb, gbc);
                 attributeCheckBoxes.add(cb);
             }
 
         } else if (withGroups) {
-            // ═══════════════════════════════════════════════════════════════
-            // CAS : GROUPES PRÉSENTS + MODE WITH GROUPS
-            // ═══════════════════════════════════════════════════════════════
+            // ── GROUPES + MODE WITH GROUPS ─────────────────────────────────
             for (final fcatools.conexpng.model.AttributeGroup group : context.getAllAttributeGroups()) {
                 gbc.gridy++;
                 final WebCheckBox groupCb = new WebCheckBox(group.getGroupName());
                 boolean allChecked = true;
-                for (String a : group.getAttributeNames()) {
+                for (String a : group.getAttributeNames())
                     if (state.context.getDontConsideredAttr().contains(a)) { allChecked = false; break; }
-                }
                 groupCb.setSelected(allChecked);
                 groupCb.addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
@@ -271,21 +256,19 @@ public class LatticeSettings extends WebAccordion {
                         state.temporaryContextChanged();
                     }
                 });
-                contentPanel.add(groupCb, gbc);
+                panel.add(groupCb, gbc);
 
                 for (final String attrName : group.getAttributeNames()) {
                     gbc.gridy++;
-                    gbcAttr.gridy = gbc.gridy;
+                    gbcSub.gridy = gbc.gridy;
                     final WebCheckBox attrCb = new WebCheckBox("  \u2514\u2500 " + attrName);
                     attrCb.setEnabled(false);
                     attrCb.setForeground(Color.GRAY);
                     attrCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                    contentPanel.add(attrCb, gbcAttr);
+                    panel.add(attrCb, gbcSub);
                     attributeCheckBoxes.add(attrCb);
                 }
             }
-
-            // Attributs orphelins comme groupes fictifs
             for (final String attrName : context.getUngroupedAttributes()) {
                 gbc.gridy++;
                 final WebCheckBox fictCb = new WebCheckBox(attrName.toUpperCase());
@@ -297,37 +280,33 @@ public class LatticeSettings extends WebAccordion {
                         state.temporaryContextChanged();
                     }
                 });
-                contentPanel.add(fictCb, gbc);
-
+                panel.add(fictCb, gbc);
                 gbc.gridy++;
-                gbcAttr.gridy = gbc.gridy;
+                gbcSub.gridy = gbc.gridy;
                 final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + attrName);
                 orphCb.setEnabled(false);
                 orphCb.setForeground(Color.GRAY);
                 orphCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                contentPanel.add(orphCb, gbcAttr);
+                panel.add(orphCb, gbcSub);
                 attributeCheckBoxes.add(orphCb);
             }
 
         } else {
-            // ═══════════════════════════════════════════════════════════════
-            // CAS : GROUPES PRÉSENTS + MODE WITHOUT GROUPS
-            // ═══════════════════════════════════════════════════════════════
+            // ── GROUPES + MODE WITHOUT GROUPS ──────────────────────────────
             for (final fcatools.conexpng.model.AttributeGroup group : context.getAllAttributeGroups()) {
                 gbc.gridy++;
                 final WebCheckBox groupCb = new WebCheckBox(group.getGroupName());
                 groupCb.setEnabled(false);
                 groupCb.setForeground(Color.GRAY);
                 boolean allChecked = true;
-                for (String a : group.getAttributeNames()) {
+                for (String a : group.getAttributeNames())
                     if (state.context.getDontConsideredAttr().contains(a)) { allChecked = false; break; }
-                }
                 groupCb.setSelected(allChecked);
-                contentPanel.add(groupCb, gbc);
+                panel.add(groupCb, gbc);
 
                 for (final String attrName : group.getAttributeNames()) {
                     gbc.gridy++;
-                    gbcAttr.gridy = gbc.gridy;
+                    gbcSub.gridy = gbc.gridy;
                     final WebCheckBox attrCb = new WebCheckBox("  \u2514\u2500 " + attrName);
                     attrCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
                     attrCb.addActionListener(new ActionListener() {
@@ -337,22 +316,19 @@ public class LatticeSettings extends WebAccordion {
                             state.temporaryContextChanged();
                         }
                     });
-                    contentPanel.add(attrCb, gbcAttr);
+                    panel.add(attrCb, gbcSub);
                     attributeCheckBoxes.add(attrCb);
                 }
             }
-
-            // Attributs orphelins (groupe fictif gris)
             for (final String attrName : context.getUngroupedAttributes()) {
                 gbc.gridy++;
                 final WebCheckBox fictCb = new WebCheckBox(attrName.toUpperCase());
                 fictCb.setEnabled(false);
                 fictCb.setForeground(Color.GRAY);
                 fictCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                contentPanel.add(fictCb, gbc);
-
+                panel.add(fictCb, gbc);
                 gbc.gridy++;
-                gbcAttr.gridy = gbc.gridy;
+                gbcSub.gridy = gbc.gridy;
                 final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + attrName);
                 orphCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
                 orphCb.addActionListener(new ActionListener() {
@@ -362,14 +338,13 @@ public class LatticeSettings extends WebAccordion {
                         state.temporaryContextChanged();
                     }
                 });
-                contentPanel.add(orphCb, gbcAttr);
+                panel.add(orphCb, gbcSub);
                 attributeCheckBoxes.add(orphCb);
             }
         }
 
-        WebScrollPane contentScrollPane = new WebScrollPane(contentPanel);
-        mainPanel.add(contentScrollPane, BorderLayout.CENTER);
-        return new WebScrollPane(mainPanel);
+        outerPanel.add(panel, BorderLayout.CENTER);
+        return new WebScrollPane(outerPanel);
     }
 
     private WebScrollPane getObjectPanel() {
