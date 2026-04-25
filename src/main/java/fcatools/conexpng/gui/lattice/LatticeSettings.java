@@ -23,15 +23,6 @@ import fcatools.conexpng.Conf;
 import fcatools.conexpng.io.locale.LocaleHandler;
 import fcatools.conexpng.model.FormalContext;
 
-/**
- * This class implements the accordion menu of the lattice tab.
- * 
- * (F1) FINAL : 
- * - Afficher attributs orphelins comme groupes fictifs TEMPORAIRES (pas de modification du contexte)
- * - Mode WITH/WITHOUT Groups
- * - RESPONSIVE (centré)
- * - Bouton Switch dynamique (Switch to Groups / Switch to Attributes)
- */
 public class LatticeSettings extends WebAccordion {
 
     private static final long serialVersionUID = 3981827958628799515L;
@@ -63,9 +54,7 @@ public class LatticeSettings extends WebAccordion {
         gbc.gridy = 0;
 
         panel.add(getLatticeObjectPanel(), gbc);
-
         gbc.gridx = 1;
-
         panel.add(getLatticeAttrPanel(), gbc);
 
         gbc.gridx = 0;
@@ -82,7 +71,6 @@ public class LatticeSettings extends WebAccordion {
             noneEdges.setSelected(true);
         }
         noneEdges.addActionListener(new ActionListener() {
-            @Override
             public void actionPerformed(ActionEvent e) {
                 state.guiConf.showEdges = false;
                 noneEdges.setSelected(true);
@@ -91,7 +79,6 @@ public class LatticeSettings extends WebAccordion {
             }
         });
         showEdges.addActionListener(new ActionListener() {
-            @Override
             public void actionPerformed(ActionEvent e) {
                 state.guiConf.showEdges = true;
                 showEdges.setSelected(true);
@@ -99,7 +86,6 @@ public class LatticeSettings extends WebAccordion {
                 state.showLabelsChanged();
             }
         });
-
         panel.add(noneEdges, gbc);
         gbc.gridx = 1;
         panel.add(showEdges, gbc);
@@ -114,36 +100,25 @@ public class LatticeSettings extends WebAccordion {
         gbo.anchor = GridBagConstraints.WEST;
         gbo.gridx = 0;
         gbo.gridy = 1;
-        panelObjects
-                .add(new WebLabel(LocaleHandler.getString("LatticeSettings.getLatticeObjectPanel.WebLabel.1")), gbo);
+        panelObjects.add(new WebLabel(LocaleHandler.getString("LatticeSettings.getLatticeObjectPanel.WebLabel.1")), gbo);
         gbo.gridy = 2;
-        final WebRadioButton noneObjects = new WebRadioButton();
+        final WebRadioButton noneObjects   = new WebRadioButton();
         noneObjects.setText(LocaleHandler.getString("LatticeSettings.getLatticeObjectPanel.noneObjects"));
-
         final WebRadioButton labelsObjects = new WebRadioButton();
         labelsObjects.setText(LocaleHandler.getString("LatticeSettings.getLatticeObjectPanel.labelsObjects"));
-
-        if (state.guiConf.showObjectLabel) {
-            labelsObjects.setSelected(true);
-        } else {
-            noneObjects.setSelected(true);
-        }
-
+        if (state.guiConf.showObjectLabel) labelsObjects.setSelected(true);
+        else noneObjects.setSelected(true);
         noneObjects.addActionListener(new ActionListener() {
-            @Override
             public void actionPerformed(ActionEvent e) {
                 state.guiConf.showObjectLabel = false;
-                noneObjects.setSelected(true);
-                labelsObjects.setSelected(false);
+                noneObjects.setSelected(true); labelsObjects.setSelected(false);
                 state.showLabelsChanged();
             }
         });
         labelsObjects.addActionListener(new ActionListener() {
-            @Override
             public void actionPerformed(ActionEvent e) {
                 state.guiConf.showObjectLabel = true;
-                labelsObjects.setSelected(true);
-                noneObjects.setSelected(false);
+                labelsObjects.setSelected(true); noneObjects.setSelected(false);
                 state.showLabelsChanged();
             }
         });
@@ -160,35 +135,25 @@ public class LatticeSettings extends WebAccordion {
         gba.anchor = GridBagConstraints.WEST;
         gba.gridx = 0;
         gba.gridy = 1;
-        panelAttributes.add(new WebLabel(LocaleHandler.getString("LatticeSettings.getLatticeAttrPanel.WebLabel.1")),
-                gba);
+        panelAttributes.add(new WebLabel(LocaleHandler.getString("LatticeSettings.getLatticeAttrPanel.WebLabel.1")), gba);
         gba.gridy = 2;
-        final WebRadioButton noneAttributes = new WebRadioButton();
+        final WebRadioButton noneAttributes   = new WebRadioButton();
         noneAttributes.setText(LocaleHandler.getString("LatticeSettings.getLatticeAttrPanel.noneAttributes"));
         final WebRadioButton labelsAttributes = new WebRadioButton();
         labelsAttributes.setText(LocaleHandler.getString("LatticeSettings.getLatticeAttrPanel.labelsAttributes"));
-
-        if (state.guiConf.showAttributeLabel) {
-            labelsAttributes.setSelected(true);
-        } else {
-            noneAttributes.setSelected(true);
-        }
-
+        if (state.guiConf.showAttributeLabel) labelsAttributes.setSelected(true);
+        else noneAttributes.setSelected(true);
         noneAttributes.addActionListener(new ActionListener() {
-            @Override
             public void actionPerformed(ActionEvent e) {
                 state.guiConf.showAttributeLabel = false;
-                noneAttributes.setSelected(true);
-                labelsAttributes.setSelected(false);
+                noneAttributes.setSelected(true); labelsAttributes.setSelected(false);
                 state.showLabelsChanged();
             }
         });
         labelsAttributes.addActionListener(new ActionListener() {
-            @Override
             public void actionPerformed(ActionEvent e) {
                 state.guiConf.showAttributeLabel = true;
-                labelsAttributes.setSelected(true);
-                noneAttributes.setSelected(false);
+                labelsAttributes.setSelected(true); noneAttributes.setSelected(false);
                 state.showLabelsChanged();
             }
         });
@@ -198,281 +163,213 @@ public class LatticeSettings extends WebAccordion {
         return panelAttributes;
     }
 
-    /**
-     * (F1) FINAL : 
-     * - Afficher les groupes réels + les attributs orphelins comme groupes FICTIFS
-     * - Ne JAMAIS modifier le contexte (temporaire uniquement)
-     * - Mode WITH/WITHOUT Groups avec switch dynamique
-     * - RESPONSIVE (centré avec margins)
-     */
     private WebScrollPane getAttributePanel() {
         WebPanel mainPanel = new WebPanel(new BorderLayout(5, 5));
-        mainPanel.setMargin(10, 10, 10, 10);  // Margin global pour responsive
-        
-        // ─────────────────────────────────────────────────────────────────────
-        // SECTION 1 : BOUTONS (RESPONSIVE)
-        // ─────────────────────────────────────────────────────────────────────
+        mainPanel.setMargin(10, 10, 10, 10);
+
+        // ── Déterminer si des groupes existent ─────────────────────────────
+        boolean hasGroups = context.getAllAttributeGroups() != null
+                            && !context.getAllAttributeGroups().isEmpty();
+
+        // ── BOUTONS ────────────────────────────────────────────────────────
         WebPanel buttonsPanel = new WebPanel(new GridLayout(2, 2, 3, 3));
         buttonsPanel.setMargin(5, 5, 5, 5);
-        
-        // Bouton Switch DYNAMIQUE
+
+        // Switch visible SEULEMENT s'il y a des groupes
         switchModeButton = new WebButton(withGroups ? "Switch to Attributes" : "Switch to Groups");
+        switchModeButton.setVisible(hasGroups);
         switchModeButton.addActionListener(new ActionListener() {
-            @Override
             public void actionPerformed(ActionEvent e) {
                 withGroups = !withGroups;
-                System.out.println("[F1-LATTICESETTINGS] Mode toggle -> " + (withGroups ? "WITH" : "WITHOUT") + " Groups");
                 update(state);
             }
         });
         buttonsPanel.add(switchModeButton);
-        
+
         WebButton showAllButton = new WebButton("Show All");
         showAllButton.addActionListener(new ActionListener() {
-            @Override
             public void actionPerformed(ActionEvent e) {
-                System.out.println("[F1-LATTICESETTINGS] Show All");
                 state.context.clearConsidered();
                 state.temporaryContextChanged();
                 update(state);
             }
         });
         buttonsPanel.add(showAllButton);
-        
+
         WebButton hideAllButton = new WebButton("Hide All");
         hideAllButton.addActionListener(new ActionListener() {
-            @Override
             public void actionPerformed(ActionEvent e) {
-                System.out.println("[F1-LATTICESETTINGS] Hide All");
                 for (int i = 0; i < context.getAttributeCount(); i++) {
-                    String attr = context.getAttributeAtIndex(i);
-                    state.context.dontConsiderAttribute(attr);
+                    state.context.dontConsiderAttribute(context.getAttributeAtIndex(i));
                 }
                 state.temporaryContextChanged();
                 update(state);
             }
         });
         buttonsPanel.add(hideAllButton);
-        
         buttonsPanel.add(new WebPanel());
-        
+
         mainPanel.add(buttonsPanel, BorderLayout.NORTH);
-        
-        // ─────────────────────────────────────────────────────────────────────
-        // SECTION 2 : PANEL AVEC ATTRIBUTS (RESPONSIVE ET CENTRÉ)
-        // ─────────────────────────────────────────────────────────────────────
+
+        // ── CONTENU ────────────────────────────────────────────────────────
         WebPanel contentPanel = new WebPanel(new GridBagLayout());
-        contentPanel.setMargin(10, 15, 10, 15);  // Margin pour centrage responsive
-        
+        contentPanel.setMargin(10, 15, 10, 15);
+
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.anchor = GridBagConstraints.WEST;
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weightx = 1.0;
-        gbc.insets = new java.awt.Insets(2, 5, 2, 5);
-        
+        gbc.anchor    = GridBagConstraints.WEST;
+        gbc.gridx     = 0;
+        gbc.gridy     = 0;
+        gbc.fill      = GridBagConstraints.HORIZONTAL;
+        gbc.weightx   = 1.0;
+        gbc.insets    = new java.awt.Insets(2, 5, 2, 5);
+
         GridBagConstraints gbcAttr = new GridBagConstraints();
-        gbcAttr.anchor = GridBagConstraints.WEST;
-        gbcAttr.gridx = 0;
-        gbcAttr.fill = GridBagConstraints.HORIZONTAL;
+        gbcAttr.anchor  = GridBagConstraints.WEST;
+        gbcAttr.gridx   = 0;
+        gbcAttr.fill    = GridBagConstraints.HORIZONTAL;
         gbcAttr.weightx = 1.0;
-        gbcAttr.insets = new java.awt.Insets(2, 30, 2, 5);
-        
-        if (withGroups) {
-            // MODE WITH GROUPS
-            System.out.println("[F1-LATTICESETTINGS] Affichage MODE WITH GROUPS");
-            
-            java.util.Collection<fcatools.conexpng.model.AttributeGroup> allGroups = 
-                context.getAllAttributeGroups();
-            
-            if (allGroups != null && !allGroups.isEmpty()) {
-                for (final fcatools.conexpng.model.AttributeGroup group : allGroups) {
-                    gbc.gridy++;
-                    
-                    final WebCheckBox groupCheckbox = new WebCheckBox(group.getGroupName());
-                    
-                    // RECALCUL DYNAMIQUE : Un groupe est coché SEULEMENT si TOUS ses attributs sont cochés
-                    boolean allAttributesChecked = true;
-                    for (String attr : group.getAttributeNames()) {
-                        if (state.context.getDontConsideredAttr().contains(attr)) {
-                            allAttributesChecked = false;
-                            break;
-                        }
+        gbcAttr.insets  = new java.awt.Insets(2, 30, 2, 5);
+
+        if (!hasGroups) {
+            // ═══════════════════════════════════════════════════════════════
+            // CAS : AUCUN GROUPE → liste plate simple (comme le panel Objets)
+            // ═══════════════════════════════════════════════════════════════
+            for (int i = 0; i < context.getAttributeCount(); i++) {
+                final String attrName = context.getAttributeAtIndex(i);
+                gbc.gridy++;
+                final WebCheckBox cb = new WebCheckBox(attrName);
+                cb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                cb.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        if (!cb.isSelected()) state.context.dontConsiderAttribute(attrName);
+                        else                  state.context.considerAttribute(attrName);
+                        state.temporaryContextChanged();
                     }
-                    groupCheckbox.setSelected(allAttributesChecked);
-                    
-                    groupCheckbox.addActionListener(new ActionListener() {
-                        @Override
-                        public void actionPerformed(ActionEvent e) {
-                            System.out.println("[F1-LATTICESETTINGS] Groupe '" + group.getGroupName() + 
-                                             "' -> " + groupCheckbox.isSelected());
-                            
-                            // Cocher/décocher le groupe = cocher/décocher TOUS ses attributs
-                            if (!groupCheckbox.isSelected()) {
-                                for (String attr : group.getAttributeNames()) {
-                                    state.context.dontConsiderAttribute(attr);
-                                }
-                            } else {
-                                for (String attr : group.getAttributeNames()) {
-                                    state.context.considerAttribute(attr);
-                                }
-                            }
-                            state.temporaryContextChanged();
-                        }
-                    });
-                    
-                    contentPanel.add(groupCheckbox, gbc);
-                    
-                    for (final String attrName : group.getAttributeNames()) {
-                        gbc.gridy++;
-                        gbcAttr.gridy = gbc.gridy;
-                        final WebCheckBox attrCheckbox = new WebCheckBox("  └─ " + attrName);
-                        
-                        attrCheckbox.setEnabled(false);
-                        attrCheckbox.setForeground(Color.GRAY);
-                        attrCheckbox.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                        
-                        contentPanel.add(attrCheckbox, gbcAttr);
-                        attributeCheckBoxes.add(attrCheckbox);
-                    }
-                }
+                });
+                contentPanel.add(cb, gbc);
+                attributeCheckBoxes.add(cb);
             }
-            
-            // AFFICHER LES ATTRIBUTS ORPHELINS comme groupes fictifs EN MAJUSCULES (TEMPORAIRES)
-            java.util.Collection<String> ungroupedAttrs = context.getUngroupedAttributes();
-            if (ungroupedAttrs != null && !ungroupedAttrs.isEmpty()) {
-                System.out.println("[F1-LATTICESETTINGS] Affichage de " + ungroupedAttrs.size() + " attributs orphelins comme groupes fictifs");
-                
-                for (final String attrName : ungroupedAttrs) {
-                    gbc.gridy++;
-                    
-                    final WebCheckBox fictiveGroupCheckbox = new WebCheckBox(attrName.toUpperCase());
-                    fictiveGroupCheckbox.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                    
-                    fictiveGroupCheckbox.addActionListener(new ActionListener() {
-                        @Override
-                        public void actionPerformed(ActionEvent e) {
-                            if (!fictiveGroupCheckbox.isSelected()) {
-                                state.context.dontConsiderAttribute(attrName);
-                            } else {
-                                state.context.considerAttribute(attrName);
-                            }
-                            state.temporaryContextChanged();
+
+        } else if (withGroups) {
+            // ═══════════════════════════════════════════════════════════════
+            // CAS : GROUPES PRÉSENTS + MODE WITH GROUPS
+            // ═══════════════════════════════════════════════════════════════
+            for (final fcatools.conexpng.model.AttributeGroup group : context.getAllAttributeGroups()) {
+                gbc.gridy++;
+                final WebCheckBox groupCb = new WebCheckBox(group.getGroupName());
+                boolean allChecked = true;
+                for (String a : group.getAttributeNames()) {
+                    if (state.context.getDontConsideredAttr().contains(a)) { allChecked = false; break; }
+                }
+                groupCb.setSelected(allChecked);
+                groupCb.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        for (String a : group.getAttributeNames()) {
+                            if (!groupCb.isSelected()) state.context.dontConsiderAttribute(a);
+                            else                       state.context.considerAttribute(a);
                         }
-                    });
-                    
-                    contentPanel.add(fictiveGroupCheckbox, gbc);
-                    
+                        state.temporaryContextChanged();
+                    }
+                });
+                contentPanel.add(groupCb, gbc);
+
+                for (final String attrName : group.getAttributeNames()) {
                     gbc.gridy++;
                     gbcAttr.gridy = gbc.gridy;
-                    final WebCheckBox orphanAttrCheckbox = new WebCheckBox("  └─ " + attrName);
-                    orphanAttrCheckbox.setEnabled(false);
-                    orphanAttrCheckbox.setForeground(Color.GRAY);
-                    orphanAttrCheckbox.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                    
-                    contentPanel.add(orphanAttrCheckbox, gbcAttr);
-                    attributeCheckBoxes.add(orphanAttrCheckbox);
+                    final WebCheckBox attrCb = new WebCheckBox("  \u2514\u2500 " + attrName);
+                    attrCb.setEnabled(false);
+                    attrCb.setForeground(Color.GRAY);
+                    attrCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                    contentPanel.add(attrCb, gbcAttr);
+                    attributeCheckBoxes.add(attrCb);
                 }
             }
+
+            // Attributs orphelins comme groupes fictifs
+            for (final String attrName : context.getUngroupedAttributes()) {
+                gbc.gridy++;
+                final WebCheckBox fictCb = new WebCheckBox(attrName.toUpperCase());
+                fictCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                fictCb.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        if (!fictCb.isSelected()) state.context.dontConsiderAttribute(attrName);
+                        else                      state.context.considerAttribute(attrName);
+                        state.temporaryContextChanged();
+                    }
+                });
+                contentPanel.add(fictCb, gbc);
+
+                gbc.gridy++;
+                gbcAttr.gridy = gbc.gridy;
+                final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + attrName);
+                orphCb.setEnabled(false);
+                orphCb.setForeground(Color.GRAY);
+                orphCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                contentPanel.add(orphCb, gbcAttr);
+                attributeCheckBoxes.add(orphCb);
+            }
+
         } else {
-            // MODE WITHOUT GROUPS
-            System.out.println("[F1-LATTICESETTINGS] Affichage MODE WITHOUT GROUPS");
-            
-            java.util.Collection<fcatools.conexpng.model.AttributeGroup> allGroups = 
-                context.getAllAttributeGroups();
-            
-            if (allGroups != null && !allGroups.isEmpty()) {
-                for (final fcatools.conexpng.model.AttributeGroup group : allGroups) {
-                    gbc.gridy++;
-                    final WebCheckBox groupCheckbox = new WebCheckBox(group.getGroupName());
-                    
-                    groupCheckbox.setEnabled(false);
-                    groupCheckbox.setForeground(Color.GRAY);
-                    
-                    // RECALCUL DYNAMIQUE : Afficher l'état réel du groupe
-                    boolean allAttributesChecked = true;
-                    for (String attr : group.getAttributeNames()) {
-                        if (state.context.getDontConsideredAttr().contains(attr)) {
-                            allAttributesChecked = false;
-                            break;
-                        }
-                    }
-                    groupCheckbox.setSelected(allAttributesChecked);
-                    
-                    contentPanel.add(groupCheckbox, gbc);
-                    
-                    for (final String attrName : group.getAttributeNames()) {
-                        gbc.gridy++;
-                        gbcAttr.gridy = gbc.gridy;
-                        final WebCheckBox attrCheckbox = new WebCheckBox("  └─ " + attrName);
-                        
-                        attrCheckbox.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                        
-                        attrCheckbox.addActionListener(new ActionListener() {
-                            @Override
-                            public void actionPerformed(ActionEvent arg0) {
-                                if (!attrCheckbox.isSelected()) {
-                                    state.context.dontConsiderAttribute(attrName);
-                                } else {
-                                    state.context.considerAttribute(attrName);
-                                }
-                                state.temporaryContextChanged();
-                            }
-                        });
-                        
-                        contentPanel.add(attrCheckbox, gbcAttr);
-                        attributeCheckBoxes.add(attrCheckbox);
-                    }
+            // ═══════════════════════════════════════════════════════════════
+            // CAS : GROUPES PRÉSENTS + MODE WITHOUT GROUPS
+            // ═══════════════════════════════════════════════════════════════
+            for (final fcatools.conexpng.model.AttributeGroup group : context.getAllAttributeGroups()) {
+                gbc.gridy++;
+                final WebCheckBox groupCb = new WebCheckBox(group.getGroupName());
+                groupCb.setEnabled(false);
+                groupCb.setForeground(Color.GRAY);
+                boolean allChecked = true;
+                for (String a : group.getAttributeNames()) {
+                    if (state.context.getDontConsideredAttr().contains(a)) { allChecked = false; break; }
                 }
-            }
-            
-            // AFFICHER LES ATTRIBUTS ORPHELINS comme groupes fictifs EN MAJUSCULES (GRIS, non-cochables)
-            java.util.Collection<String> ungroupedAttrs = context.getUngroupedAttributes();
-            if (ungroupedAttrs != null && !ungroupedAttrs.isEmpty()) {
-                System.out.println("[F1-LATTICESETTINGS] Affichage de " + ungroupedAttrs.size() + " attributs orphelins (groupe fictif gris)");
-                
-                for (final String attrName : ungroupedAttrs) {
-                    gbc.gridy++;
-                    
-                    final WebCheckBox fictiveGroupCheckbox = new WebCheckBox(attrName.toUpperCase());
-                    fictiveGroupCheckbox.setEnabled(false);
-                    fictiveGroupCheckbox.setForeground(Color.GRAY);
-                    
-                    boolean isChecked = !state.context.getDontConsideredAttr().contains(attrName);
-                    fictiveGroupCheckbox.setSelected(isChecked);
-                    
-                    contentPanel.add(fictiveGroupCheckbox, gbc);
-                    
+                groupCb.setSelected(allChecked);
+                contentPanel.add(groupCb, gbc);
+
+                for (final String attrName : group.getAttributeNames()) {
                     gbc.gridy++;
                     gbcAttr.gridy = gbc.gridy;
-                    final WebCheckBox orphanAttrCheckbox = new WebCheckBox("  └─ " + attrName);
-                    orphanAttrCheckbox.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                    
-                    orphanAttrCheckbox.addActionListener(new ActionListener() {
-                        @Override
+                    final WebCheckBox attrCb = new WebCheckBox("  \u2514\u2500 " + attrName);
+                    attrCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                    attrCb.addActionListener(new ActionListener() {
                         public void actionPerformed(ActionEvent e) {
-                            if (!orphanAttrCheckbox.isSelected()) {
-                                state.context.dontConsiderAttribute(attrName);
-                            } else {
-                                state.context.considerAttribute(attrName);
-                            }
+                            if (!attrCb.isSelected()) state.context.dontConsiderAttribute(attrName);
+                            else                      state.context.considerAttribute(attrName);
                             state.temporaryContextChanged();
                         }
                     });
-                    
-                    contentPanel.add(orphanAttrCheckbox, gbcAttr);
-                    attributeCheckBoxes.add(orphanAttrCheckbox);
+                    contentPanel.add(attrCb, gbcAttr);
+                    attributeCheckBoxes.add(attrCb);
                 }
+            }
+
+            // Attributs orphelins (groupe fictif gris)
+            for (final String attrName : context.getUngroupedAttributes()) {
+                gbc.gridy++;
+                final WebCheckBox fictCb = new WebCheckBox(attrName.toUpperCase());
+                fictCb.setEnabled(false);
+                fictCb.setForeground(Color.GRAY);
+                fictCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                contentPanel.add(fictCb, gbc);
+
+                gbc.gridy++;
+                gbcAttr.gridy = gbc.gridy;
+                final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + attrName);
+                orphCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                orphCb.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        if (!orphCb.isSelected()) state.context.dontConsiderAttribute(attrName);
+                        else                      state.context.considerAttribute(attrName);
+                        state.temporaryContextChanged();
+                    }
+                });
+                contentPanel.add(orphCb, gbcAttr);
+                attributeCheckBoxes.add(orphCb);
             }
         }
-        
+
         WebScrollPane contentScrollPane = new WebScrollPane(contentPanel);
         mainPanel.add(contentScrollPane, BorderLayout.CENTER);
-        
-        // Ajouter scrollbar au mainPanel ENTIER (pas juste contentPanel)
-        WebScrollPane mainScrollPane = new WebScrollPane(mainPanel);
-        return mainScrollPane;
+        return new WebScrollPane(mainPanel);
     }
 
     private WebScrollPane getObjectPanel() {
@@ -480,38 +377,26 @@ public class LatticeSettings extends WebAccordion {
         panel.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.anchor = GridBagConstraints.WEST;
-        gbc.gridx = 0;
-        gbc.gridy = 0;
+        gbc.gridx  = 0;
+        gbc.gridy  = 0;
         for (FullObject<String, String> s : context.getObjects()) {
             gbc.gridy++;
-            final WebCheckBox box = new WebCheckBox(s.getIdentifier());
+            final WebCheckBox box  = new WebCheckBox(s.getIdentifier());
             final FullObject<String, String> temp = s;
             box.setSelected(!state.context.getDontConsideredObj().contains(temp));
             box.addActionListener(new ActionListener() {
-
-                @Override
                 public void actionPerformed(ActionEvent arg0) {
-                    if (!box.isSelected()) {
-                        state.context.dontConsiderObject(temp);
-                    } else {
-                        state.context.considerObject(temp);
-                    }
+                    if (!box.isSelected()) state.context.dontConsiderObject(temp);
+                    else                   state.context.considerObject(temp);
                     state.temporaryContextChanged();
                 }
             });
-
             panel.add(box, gbc);
             objectCheckBoxes.add(box);
         }
-        WebScrollPane sp = new WebScrollPane(panel);
-        return sp;
+        return new WebScrollPane(panel);
     }
 
-    /**
-     * Updates the panels and refreshes the Switch button label
-     * 
-     * @param state
-     */
     public void update(Conf state) {
         this.removePane(0);
         this.addPane(0, LocaleHandler.getString("LatticeSettings.LatticeSettings.pane.0"), getLatticePanel());
