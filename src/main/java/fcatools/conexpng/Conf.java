@@ -153,6 +153,14 @@ public class Conf {
         } catch (IllegalObjectException e) {
             // should never happens
         }
+        
+        // ✅ FIX UNDO/REDO : Copier aussi les groupes d'attributs !
+        if (conf.context.hasAttributeGroupManager()) {
+            copy.context.setAttributeGroupManager(
+                conf.context.getAttributeGroupManager().clone()
+            );
+        }
+        
         return copy;
     }
 

@@ -986,4 +986,31 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
         
         System.out.println("[F1] Vérification complète. Groupes totaux : " + attributeGroupManager.getGroupCount());
     }
+    
+ // ═════════════════════════════════════════════════════════════
+    // FIX UNDO/REDO : Setters pour AttributeGroupManager
+    // ═════════════════════════════════════════════════════════════
+
+    /**
+     * Set the attribute group manager (used by undo/redo)
+     * 
+     * (FIX UNDO/REDO) : Cette méthode est CRUCIALE pour restaurer 
+     * l'état des groupes lors des opérations undo/redo
+     * 
+     * @param newManager Le nouveau manager à utiliser
+     */
+    public void setAttributeGroupManager(AttributeGroupManager newManager) {
+        if (newManager != null) {
+            this.attributeGroupManager = newManager;
+        }
+    }
+
+    /**
+     * (FIX UNDO/REDO) : Vérifier si le manager est bien configuré
+     * 
+     * @return true si le manager n'est pas null
+     */
+    public boolean hasAttributeGroupManager() {
+        return this.attributeGroupManager != null;
+    }
 }
