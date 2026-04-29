@@ -11,6 +11,7 @@ import java.util.Vector;
 
 import de.tudresden.inf.tcs.fcaapi.Concept;
 import de.tudresden.inf.tcs.fcaapi.FCAImplication;
+import de.tudresden.inf.tcs.fcaapi.exception.IllegalAttributeException;
 import de.tudresden.inf.tcs.fcaapi.exception.IllegalObjectException;
 import de.tudresden.inf.tcs.fcalib.FullObject;
 import fcatools.conexpng.gui.MainToolbar;
@@ -32,6 +33,7 @@ import fcatools.conexpng.model.FormalContext;
  * "Model" in an MVC context.
  * 
  */
+
 public class Conf {
     public String filePath;
     public Vector<String> lastOpened = new Vector<>(5);
@@ -154,7 +156,25 @@ public class Conf {
             // should never happens
         }
         
-        // ✅ FIX UNDO/REDO : Copier aussi les groupes d'attributs !
+        // ✅ FIX UNDO/REDO : Copier aussi la matrice d'incidence (les X) !
+        // Sans cela, les toggles de cases ne sont pas sauvegardés
+        for (int i = 0; i < conf.context.getObjectCount(); i++) {
+            for (int j = 0; j < conf.context.getAttributeCount(); j++) {
+                String objId = conf.context.getObjectAtIndex(i).getIdentifier();
+                String attr = conf.context.getAttributeAtIndex(j);
+                if (conf.context.objectHasAttribute(conf.context.getObject(objId), attr)) {
+                    try {
+                        copy.context.addAttributeToObject(attr, objId);
+                    } catch (IllegalAttributeException e1) {
+                        e1.printStackTrace();
+                    } catch (IllegalObjectException e1) {
+                        e1.printStackTrace();
+                    }
+                }
+            }
+        }
+        
+        // ✅ FIX UNDO/REDO : Copier aussi les groupes d'attributs
         if (conf.context.hasAttributeGroupManager()) {
             copy.context.setAttributeGroupManager(
                 conf.context.getAttributeGroupManager().clone()

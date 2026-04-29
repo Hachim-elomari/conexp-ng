@@ -567,11 +567,24 @@ public class ContextEditor extends View {
             if (matrix.isRenaming) return;
             if (i <= 1 || j <= 0) return;
             int i = clamp(this.i - 2, 0, state.context.getObjectCount() - 1);
-            int j = clamp(this.j, 1, state.context.getAttributeCount()) - 1;
+            int j = this.j; // ← Index visuel direct
+            
             state.saveConf();
-            state.context.toggleAttributeForObject(state.context.getAttributeAtIndex(j), state.context.getObjectAtIndex(i).getIdentifier());
-            matrix.saveSelection(); matrixModel.fireTableDataChanged(); matrix.restoreSelection();
-            state.contextChanged(); state.getContextEditorUndoManager().makeRedoable();
+            
+            // ✅ FIX : Utiliser getAttributeAtVisualColumn() pour obtenir l'attribut correct
+            // (au lieu de getAttributeAtIndex qui utilise l'ordre interne)
+            String attr = matrixModel.getAttributeAtVisualColumn(j);
+            if (attr != null) {
+                state.context.toggleAttributeForObject(
+                    attr, 
+                    state.context.getObjectAtIndex(i).getIdentifier()
+                );
+                matrix.saveSelection(); 
+                matrixModel.fireTableDataChanged(); 
+                matrix.restoreSelection();
+                state.contextChanged(); 
+                state.getContextEditorUndoManager().makeRedoable();
+            }
         }
     }
 
@@ -655,8 +668,36 @@ public class ContextEditor extends View {
     class TransposeAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            state.saveConf(); state.context.transpose(); matrixModel.fireTableStructureChanged();
-            matrix.clearSelection(); matrix.saveSelection(); state.contextChanged(); state.getContextEditorUndoManager().makeRedoable();
+            
+            // Vérifier orphelins
+            if (!checkOrphanGroupingState()) {
+                return;
+            }
+            
+            // Warning groupes
+            boolean hasGroups = !state.context.getAllAttributeGroups().isEmpty();
+            if (hasGroups) {
+                int choice = JOptionPane.showConfirmDialog(
+                    ContextEditor.this,
+                    "Warning: Transposing will remove all attribute groups.\n" +
+                    "You can recreate groups manually after transpose.\n\n" +
+                    "Continue?",
+                    "Groups Will Be Removed",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+                );
+                if (choice != JOptionPane.YES_OPTION) return;
+            }
+            
+            // Effacer groupes et transpose
+            state.context.getAttributeGroupManager().clear();
+            state.saveConf();
+            state.context.transpose();
+            matrixModel.fireTableStructureChanged();
+            matrix.clearSelection();
+            matrix.saveSelection();
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
         }
     }
 
@@ -665,8 +706,19 @@ public class ContextEditor extends View {
         AddAttributeAtAction(int index) { this.index = index; }
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            state.saveConf(); matrix.saveSelection(); addAttributeAt(index);
-            matrix.restoreSelection(); state.contextChanged(); state.getContextEditorUndoManager().makeRedoable();
+            state.saveConf(); 
+            matrix.saveSelection(); 
+            addAttributeAt(index);
+            
+            // ✅ FIX : Réorganiser les attributs après l'ajout pour que les groupes
+            // soient correctement positionnés visuellement
+            if (!state.context.getAllAttributeGroups().isEmpty()) {
+                state.context.reorganizeAttributesForGroups();
+            }
+            
+            matrix.restoreSelection(); 
+            state.contextChanged(); 
+            state.getContextEditorUndoManager().makeRedoable();
         }
     }
 
