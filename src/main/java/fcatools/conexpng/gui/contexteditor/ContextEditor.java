@@ -578,13 +578,21 @@ public class ContextEditor extends View {
             if (matrix.isRenaming) return;
             if (i <= 1 || j <= 0) return;
             int i = clamp(this.i - 2, 0, state.context.getObjectCount() - 1);
-            int j = this.j; // ← Index visuel direct
+            
+            // ✅ FIX : Ajuster l'index de colonne en fonction de objColOffset
+            boolean hasObjGroups = state.context.hasObjectGroups();
+            int objColOffset = hasObjGroups ? 1 : 0;
+            
+            // Calculer l'index correct pour getAttributeAtVisualColumn()
+            // Les colonnes JTable sont : [0:groupe] [1:objet] [2+:attributs]
+            // Nous devons passer l'index relatif aux attributs, pas l'index global
+            int attrColumnIndex = this.j - objColOffset - 1;
             
             state.saveConf();
             
-            // ✅ FIX : Utiliser getAttributeAtVisualColumn() pour obtenir l'attribut correct
-            // (au lieu de getAttributeAtIndex qui utilise l'ordre interne)
-            String attr = matrixModel.getAttributeAtVisualColumn(j);
+            // ✅ Appeler avec l'index CORRIGÉ
+            String attr = matrixModel.getAttributeAtVisualColumn(attrColumnIndex + 1);
+            
             if (attr != null) {
                 state.context.toggleAttributeForObject(
                     attr, 
