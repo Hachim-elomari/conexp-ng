@@ -83,7 +83,10 @@ public class ContextEditor extends View {
         groupHeaderPopupMenu   = new WebPopupMenu();
 
         matrixModel = new ContextMatrixModel(state);
-        matrix      = new ContextMatrix(matrixModel, state.guiConf.columnWidths);
+        
+        // ✅ FIX : Ajouter state comme 3ème paramètre au constructeur ContextMatrix
+        matrix = new ContextMatrix(matrixModel, state.guiConf.columnWidths, state);
+        
         JScrollPane scrollPane = matrix.createStripedJScrollPane(getBackground());
         scrollPane.setBorder(new EmptyBorder(3, 3, 3, 3));
         toolbar.setFloatable(false);
@@ -159,9 +162,9 @@ public class ContextEditor extends View {
         int choice = JOptionPane.showOptionDialog(
             this,
             "Some attributes are not in any group yet:\n" + orphanList + "\n\n"
-            + "  Finish            \u2192 each ungrouped attribute will automatically\n"
-            + "                       be placed in its own group (e.g. \"gold\" \u2192 group \"GOLD\").\n"
-            + "  Continue grouping \u2192 stay in Context Editor to finish grouping manually.",
+            + "  Finish            → each ungrouped attribute will automatically\n"
+            + "                       be placed in its own group (e.g. \"gold\" → group \"GOLD\").\n"
+            + "  Continue grouping → stay in Context Editor to finish grouping manually.",
             "Unfinished Grouping",
             JOptionPane.YES_NO_OPTION,
             JOptionPane.WARNING_MESSAGE,
@@ -445,19 +448,27 @@ public class ContextEditor extends View {
         lastActiveRowIndex    = i;
         lastActiveColumnIndex = j;
         if (!e.isPopupTrigger()) return;
-        if (i == 0 && j == 0) return;
-        if (i > 1 && j > 0) {
-            if (matrix.getSelectedColumn() <= 0 || matrix.getSelectedRow() <= 1) matrix.selectCell(i, j);
-            cellPopupMenu.show(e.getComponent(), e.getX(), e.getY()); return;
-        }
-        if (j == 0 && i > 1) { objectCellPopupMenu.show(e.getComponent(), e.getX(), e.getY()); return; }
-        if (i == 0 && j > 0) {
-            Object val = matrixModel.getValueAt(0, j);
-            String groupName = (val != null) ? val.toString().trim() : "";
-            if (!groupName.isEmpty()) groupHeaderPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+        
+        boolean hasObjGroups = state.context.hasObjectGroups();
+        int objCol = hasObjGroups ? 1 : 0;
+        
+        if (i == 0 && j <= objCol) return; // Coins haut-gauche
+        
+        if (i > 1 && j > objCol) {
+            if (matrix.getSelectedColumn() <= objCol || matrix.getSelectedRow() <= 1)
+                matrix.selectCell(i, j);
+            cellPopupMenu.show(e.getComponent(), e.getX(), e.getY()); 
             return;
         }
-        if (i == 1 && j > 0) attributeCellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+        
+        if (j == objCol && i > 1) {
+            objectCellPopupMenu.show(e.getComponent(), e.getX(), e.getY()); 
+            return;
+        }
+        
+        if (i == 1 && j > objCol) {
+            attributeCellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+        }
     }
 
     private AttributeGroup getClickedGroup() {
@@ -669,28 +680,33 @@ public class ContextEditor extends View {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
             
-            // Vérifier orphelins
+            // ✅ Vérifier les attributs orphelins AVANT le transpose
             if (!checkOrphanGroupingState()) {
                 return;
             }
             
-            // Warning groupes
+            // ✅ MODIFIÉ : Ne plus effacer les groupes, juste informer
             boolean hasGroups = !state.context.getAllAttributeGroups().isEmpty();
             if (hasGroups) {
                 int choice = JOptionPane.showConfirmDialog(
                     ContextEditor.this,
-                    "Warning: Transposing will remove all attribute groups.\n" +
-                    "You can recreate groups manually after transpose.\n\n" +
-                    "Continue?",
-                    "Groups Will Be Removed",
+                    "Transpose will convert attribute groups to object groups.\n" +
+                    "The groups will be displayed vertically in the first column.\n\n" +
+                    "Continue with transpose?",
+                    "Transpose Groups",
                     JOptionPane.YES_NO_OPTION,
-                    JOptionPane.WARNING_MESSAGE
+                    JOptionPane.INFORMATION_MESSAGE
                 );
-                if (choice != JOptionPane.YES_OPTION) return;
+                
+                if (choice != JOptionPane.YES_OPTION) {
+                    return;
+                }
             }
             
-            // Effacer groupes et transpose
-            state.context.getAttributeGroupManager().clear();
+            // ✅ NE PLUS effacer les groupes !
+            // state.context.getAttributeGroupManager().clear(); ← ENLEVER CETTE LIGNE
+            
+            // ✅ Transpose (qui va maintenant créer objectToGroupMap)
             state.saveConf();
             state.context.transpose();
             matrixModel.fireTableStructureChanged();
@@ -698,6 +714,18 @@ public class ContextEditor extends View {
             matrix.saveSelection();
             state.contextChanged();
             state.getContextEditorUndoManager().makeRedoable();
+            
+            // ✅ Message de confirmation
+            if (hasGroups) {
+                JOptionPane.showMessageDialog(
+                    ContextEditor.this,
+                    "Transpose completed!\n" +
+                    "Attribute groups have been converted to object groups.\n" +
+                    "They are now displayed in the first column.",
+                    "Success",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
+            }
         }
     }
 

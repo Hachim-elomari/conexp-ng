@@ -17,6 +17,8 @@ import java.util.Map;
 
 import static fcatools.conexpng.Util.clamp;
 import static javax.swing.KeyStroke.getKeyStroke;
+
+import fcatools.conexpng.Conf;
 import fcatools.conexpng.model.AttributeGroup;
 import java.util.List;
 
@@ -38,9 +40,14 @@ public class ContextMatrix extends JTable {
     private static final Color GROUP_FG     = new Color(0, 51, 102);
     private static final Color GROUP_BORDER = new Color(100, 150, 200);
 
-    public ContextMatrix(TableModel dm, Map<Integer, Integer> columnWidths) {
+    // ✅ FIX : Déclarer state comme champ de classe
+    private Conf state;
+
+    // ✅ FIX : Ajouter Conf state comme 3ème paramètre
+    public ContextMatrix(TableModel dm, Map<Integer, Integer> columnWidths, Conf state) {
         super(dm);
         this.columnWidths = columnWidths;
+        this.state = state;  // ✅ Maintenant state existe comme paramètre
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         setTableHeader(null);
         setOpaque(false);
@@ -62,16 +69,31 @@ public class ContextMatrix extends JTable {
                     boolean isSelected, boolean hasFocus, int row, int column) {
                 super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
                 setHorizontalAlignment(JLabel.CENTER);
-                if (row == 0) {
+                
+                boolean hasObjGroups = state.context.hasObjectGroups();
+                
+                // ✅ NOUVEAU : Colonne 0 = groupes d'objets (si elle existe)
+                if (column == 0 && hasObjGroups && row >= 2) {
+                    setBackground(GROUP_HEADER_COLOR);
+                    setFont(getFont().deriveFont(Font.BOLD, 10f));
+                    setForeground(Color.BLACK);
+                    setText(""); // paint() s'en charge
+                }
+                // Ligne 0 : noms de groupes d'attributs
+                else if (row == 0) {
                     setBackground(GROUP_HEADER_COLOR);
                     setFont(getFont().deriveFont(Font.BOLD));
                     setForeground(Color.BLACK);
-                    setText(""); // (F1) Toujours vide : paint() s'en charge
-                } else if (row == 1) {
+                    setText(""); // paint() s'en charge
+                }
+                // Ligne 1 : noms d'attributs
+                else if (row == 1) {
                     setBackground(HEADER_COLOR_START);
                     setFont(getFont().deriveFont(Font.PLAIN));
                     setForeground(Color.BLACK);
-                } else {
+                }
+                // Données
+                else {
                     if (isSelected) {
                         setBackground(table.getSelectionBackground());
                         setForeground(table.getSelectionForeground());
@@ -94,12 +116,17 @@ public class ContextMatrix extends JTable {
     @Override
     public void paint(Graphics g) {
         super.paint(g); // JTable dessine normalement d'abord
-
-        // Ensuite on dessine les cellules fusionnées PAR-DESSUS
+     
         if (getModel() instanceof ContextMatrixModel) {
             ContextMatrixModel model = (ContextMatrixModel) getModel();
             if (model.isDisplayWithGroups()) {
+                // Fusion HORIZONTALE des groupes d'attributs (ligne 0)
                 paintMergedGroupCells((Graphics2D) g, model);
+            }
+            
+            // ✅ NOUVEAU : Fusion VERTICALE des groupes d'objets (colonne 0)
+            if (state.context.hasObjectGroups()) {
+                paintMergedObjectGroupCells((Graphics2D) g, model);
             }
         }
     }
@@ -158,6 +185,66 @@ public class ContextMatrix extends JTable {
             col = lastCol + 1;
         }
     }
+    
+    /**
+     * Dessine les cellules fusionnées pour les groupes d'objets (colonne 0, vertical)
+     */
+    private void paintMergedObjectGroupCells(Graphics2D g2d, ContextMatrixModel model) {
+        int rowCount = getRowCount();
+        int row = 2; // Commencer après ligne groupes et ligne attributs
+     
+        while (row < rowCount) {
+            Object val = model.getValueAt(row, 0);
+            String groupName = (val != null) ? val.toString().trim() : "";
+     
+            if (groupName.isEmpty()) {
+                row++;
+                continue;
+            }
+     
+            // Trouver la dernière ligne de ce groupe
+            int lastRow = row;
+            for (int next = row + 1; next < rowCount; next++) {
+                Object nextVal = model.getValueAt(next, 0);
+                String nextGroup = (nextVal != null) ? nextVal.toString().trim() : "";
+                if (nextGroup.equals(groupName)) {
+                    lastRow = next;
+                } else {
+                    break;
+                }
+            }
+     
+            // Rectangle fusionné (vertical)
+            Rectangle r1 = getCellRect(row, 0, true);
+            Rectangle r2 = getCellRect(lastRow, 0, true);
+            int x      = r1.x;
+            int y      = r1.y;
+            int width  = r1.width;
+            int height = r2.y + r2.height - r1.y;
+     
+            // Fond
+            g2d.setColor(GROUP_BG);
+            g2d.fillRect(x, y, width, height);
+     
+            // Bordure
+            g2d.setColor(GROUP_BORDER);
+            g2d.drawRect(x, y, width - 1, height - 1);
+     
+            // Texte centré verticalement
+            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g2d.setFont(new Font("Arial", Font.BOLD, 11));
+            g2d.setColor(GROUP_FG);
+            FontMetrics fm = g2d.getFontMetrics();
+            
+            // Centrer le texte
+            int textX = x + (width - fm.stringWidth(groupName)) / 2;
+            int textY = y + (height + fm.getAscent() - fm.getDescent()) / 2;
+            g2d.drawString(groupName, textX, textY);
+     
+            row = lastRow + 1;
+        }
+    }
 
     // =========================================================================
     // Reste du code original inchangé
@@ -214,7 +301,8 @@ public class ContextMatrix extends JTable {
 
     public void selectCell(int row, int column) {
         row = clamp(row, 2, getRowCount() - 1);
-        column = clamp(column, 1, getColumnCount() - 1);
+        int minCol = state.context.hasObjectGroups() ? 2 : 1; // Si col groupes, commencer à 2
+        column = clamp(column, minCol, getColumnCount() - 1);
         setRowSelectionInterval(row, row);
         setColumnSelectionInterval(column, column);
     }
@@ -275,7 +363,8 @@ public class ContextMatrix extends JTable {
 
     @Override
     public boolean isCellSelected(int i, int j) {
-        return i > 1 && j != 0 && super.isCellSelected(i, j);
+        int minCol = state.context.hasObjectGroups() ? 1 : 0;
+        return i > 1 && j > minCol && super.isCellSelected(i, j);
     }
 
     @Override

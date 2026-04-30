@@ -237,7 +237,7 @@ public class AttributeExplorationExpert extends AbstractExpert<String, String, F
             mcestate.context = new FormalContext();
             mcestate.context.addAttributes(context.getAttributes());
             matrixModel = new ContextMatrixModel(mcestate);
-            matrix = new ContextMatrix(matrixModel, mcestate.guiConf.columnWidths);
+            matrix = new ContextMatrix(matrixModel, mcestate.guiConf.columnWidths, mcestate);
             try {
                 mcestate.context.addObject(new FullObject<String, String>("obj" + context.getObjectCount(), question
                         .getPremise()));

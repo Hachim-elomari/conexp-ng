@@ -46,7 +46,10 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
 
     @Override
     public boolean isCellEditable(int i, int j) {
-        return (i + j > 1) && (i <= 1 || j == 0);
+        boolean hasObjGroups = context.hasObjectGroups();
+        int minEditableCol = hasObjGroups ? 1 : 0;
+        
+        return (i + j > 1) && (i <= 1 || j == minEditableCol);
     }
 
     // (F1) ÉTAPE 2 : getRowCount() retourne +2 (ligne groupes + ligne attributs)
@@ -57,12 +60,15 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
 
     @Override
     public int getColumnCount() {
-        if (!displayWithGroups) {
-            return context.getAttributeCount() + 1;
+        // ✅ NOUVEAU : Ajouter +1 si on a des groupes d'objets
+        int extraCol = context.hasObjectGroups() ? 1 : 0;
+        
+        if (!displayWithGroups || context.getAllAttributeGroups().isEmpty()) {
+            return context.getAttributeCount() + 1 + extraCol;
         }
-
-        int count = 1;
-
+     
+        int count = 1 + extraCol; // Col 0 = objets (+ col groupes si besoin)
+     
         for (AttributeGroup group : context.getAllAttributeGroups()) {
             if (!group.isExpanded()) {
                 count += 1;
@@ -70,9 +76,9 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
                 count += group.getAttributeCount();
             }
         }
-
+     
         count += context.getUngroupedAttributes().size();
-
+     
         return count;
     }
 
@@ -87,7 +93,8 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
             return "";
         }
 
-        if (!displayWithGroups) {
+        // ✅ FIX : Si pas de groupes d'attributs, utiliser l'affichage simple
+        if (!displayWithGroups || context.getAllAttributeGroups().isEmpty()) {
             return context.getAttributeAtIndex(columnIndex - 1);
         }
 
@@ -135,39 +142,73 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
     }
 
     // (F1) ÉTAPE 2 : getValueAt modifié
-    // rowIndex == 0 → noms des GROUPES
-    // rowIndex == 1 → noms des ATTRIBUTS
-    // rowIndex >= 2 → DATA
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
-        // (F1) ÉTAPE 2 : Ligne des noms de groupes (rowIndex == 0)
+        boolean hasObjGroups = context.hasObjectGroups();
+        int objColOffset = hasObjGroups ? 1 : 0; // Décalage si colonne groupes existe
+        
+        // ═══════════════════════════════════════════════════════
+        // LIGNE 0 : Noms de groupes d'attributs (horizontal)
+        // ═══════════════════════════════════════════════════════
         if (rowIndex == 0) {
-            if (columnIndex == 0) {
-                return ""; // Coin (0,0)
+            if (columnIndex == 0 && hasObjGroups) {
+                return ""; // Coin haut-gauche (col groupes objets)
             }
-            return getGroupNameAtColumn(columnIndex);
+            if (columnIndex == objColOffset) {
+                return ""; // Coin (0, col objets)
+            }
+            // ✅ FIX : Si pas de groupes, retourner vide
+            if (context.getAllAttributeGroups().isEmpty()) {
+                return "";
+            }
+            // Afficher les groupes d'attributs
+            return getGroupNameAtColumn(columnIndex - objColOffset);
         }
-
-        // (F1) ÉTAPE 2 : Ligne des noms d'attributs (rowIndex == 1)
+     
+        // ═══════════════════════════════════════════════════════
+        // LIGNE 1 : Noms d'attributs
+        // ═══════════════════════════════════════════════════════
         if (rowIndex == 1) {
-            if (columnIndex == 0) {
-                return ""; // Coin (1,0)
+            if (columnIndex == 0 && hasObjGroups) {
+                return ""; // Coin (1, col groupes objets)
             }
-            return getAttributeNameAtColumn(columnIndex);
+            if (columnIndex == objColOffset) {
+                return ""; // Coin (1, col objets)
+            }
+            return getAttributeNameAtColumn(columnIndex - objColOffset);
         }
-
-        // DATA : rowIndex >= 2 (décalage de -2 pour accéder aux objets)
-        if (columnIndex == 0) {
+     
+        // ═══════════════════════════════════════════════════════
+        // LIGNES 2+ : DONNÉES
+        // ═══════════════════════════════════════════════════════
+        
+        // ✅ NOUVEAU : COLONNE 0 = Nom du groupe d'objet (vertical)
+        if (columnIndex == 0 && hasObjGroups) {
+            String objName = context.getObjectAtIndex(rowIndex - 2).getIdentifier();
+            String groupName = context.getGroupNameForObject(objName);
+            return (groupName != null) ? groupName : "";
+        }
+        
+        // COLONNE objColOffset : Noms des objets
+        if (columnIndex == objColOffset) {
             return String.format("%s", context.getObjectAtIndex(rowIndex - 2).getIdentifier());
         }
-
-        if (!displayWithGroups) {
-            return context.objectHasAttribute(context.getObjectAtIndex(rowIndex - 2),
-                    context.getAttributeAtIndex(columnIndex - 1)) ? "X" : "";
+     
+        // ✅ FIX : Si pas de groupes d'attributs OU displayWithGroups == false, 
+        // utiliser le mode simple (indexation directe)
+        if (!displayWithGroups || context.getAllAttributeGroups().isEmpty()) {
+            int attrIndex = columnIndex - objColOffset - 1;
+            if (attrIndex >= 0 && attrIndex < context.getAttributeCount()) {
+                return context.objectHasAttribute(
+                    context.getObjectAtIndex(rowIndex - 2),
+                    context.getAttributeAtIndex(attrIndex)
+                ) ? "X" : "";
+            }
+            return "";
         }
-
-        // Mode avec groupes
-        String displayValue = getDisplayValueForGroupMode(rowIndex, columnIndex);
+     
+        // Mode avec groupes d'attributs
+        String displayValue = getDisplayValueForGroupMode(rowIndex, columnIndex - objColOffset);
         return displayValue;
     }
 
@@ -209,6 +250,15 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
      * (F1) ÉTAPE 2 : Récupérer le nom de l'attribut à une colonne donnée
      */
     private String getAttributeNameAtColumn(int columnIndex) {
+        // ✅ FIX : Si pas de groupes, utiliser l'indexation simple
+        if (context.getAllAttributeGroups().isEmpty()) {
+            int attrIndex = columnIndex - 1;
+            if (attrIndex >= 0 && attrIndex < context.getAttributeCount()) {
+                return context.getAttributeAtIndex(attrIndex);
+            }
+            return "";
+        }
+        
         int colIdx = 0;
         int targetIdx = columnIndex - 1;
 
@@ -314,22 +364,30 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return "";
     }
 
-    // (F1) ÉTAPE 2 : setValueAt modifié (rowIndex >= 2 pour les données)
+    // (F1) ÉTAPE 2 : setValueAt modifié
     @Override
     public void setValueAt(Object value, int rowIndex, int columnIndex) {
-        // Pas d'édition sur les lignes 0 et 1 (groupes et attributs)
-        if (rowIndex <= 1 || columnIndex == 0) {
+        boolean hasObjGroups = context.hasObjectGroups();
+        int objColOffset = hasObjGroups ? 1 : 0;
+        
+        // Pas d'édition sur les lignes 0 et 1, ni sur la colonne des groupes
+        if (rowIndex <= 1 || (hasObjGroups && columnIndex == 0)) {
             return;
         }
-
-        if (!displayWithGroups) {
-            if (columnIndex > context.getAttributeCount()) {
+        if (!hasObjGroups && columnIndex == 0) {
+            return; // Colonne des objets
+        }
+        
+        // ✅ FIX : Si pas de groupes d'attributs, toujours utiliser le mode simple
+        if (!displayWithGroups || context.getAllAttributeGroups().isEmpty()) {
+            int attrIndex = columnIndex - objColOffset - 1;
+            if (attrIndex < 0 || attrIndex >= context.getAttributeCount()) {
                 return;
             }
             
-            String attr = context.getAttributeAtIndex(columnIndex - 1);
+            String attr = context.getAttributeAtIndex(attrIndex);
             de.tudresden.inf.tcs.fcalib.FullObject<String, String> obj = 
-                context.getObjectAtIndex(rowIndex - 2);  // Décalage -2
+                context.getObjectAtIndex(rowIndex - 2);
             
             state.saveConf();
             context.toggleAttributeForObject(attr, obj.getIdentifier());
@@ -338,11 +396,11 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
             fireTableCellUpdated(rowIndex, columnIndex);
             return;
         }
-
-        String attr = getAttributeAtVisualColumn(columnIndex);
+     
+        String attr = getAttributeAtVisualColumn(columnIndex - objColOffset);
         if (attr != null) {
             de.tudresden.inf.tcs.fcalib.FullObject<String, String> obj = 
-                context.getObjectAtIndex(rowIndex - 2);  // Décalage -2
+                context.getObjectAtIndex(rowIndex - 2);
             
             state.saveConf();
             context.toggleAttributeForObject(attr, obj.getIdentifier());
@@ -461,6 +519,15 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
             return null;
         }
 
+        // ✅ FIX : Si pas de groupes, utiliser l'indexation simple
+        if (context.getAllAttributeGroups().isEmpty()) {
+            int attrIndex = columnIndex - 1;
+            if (attrIndex >= 0 && attrIndex < context.getAttributeCount()) {
+                return context.getAttributeAtIndex(attrIndex);
+            }
+            return null;
+        }
+
         int colIdx = 0;
         for (AttributeGroup group : context.getAllAttributeGroups()) {
             if (!group.isExpanded()) {
@@ -488,7 +555,7 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
     private List<Integer> getVisibleColumnIndices() {
         List<Integer> visibleIndices = new java.util.ArrayList<Integer>();
 
-        if (!displayWithGroups) {
+        if (!displayWithGroups || context.getAllAttributeGroups().isEmpty()) {
             for (int i = 0; i < context.getAttributeCount(); i++) {
                 visibleIndices.add(i);
             }
