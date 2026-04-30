@@ -452,8 +452,18 @@ public class ContextEditor extends View {
         boolean hasObjGroups = state.context.hasObjectGroups();
         int objCol = hasObjGroups ? 1 : 0;
         
-        if (i == 0 && j <= objCol) return; // Coins haut-gauche
+        // ✅ FIX : Vérifier si on clique sur les en-têtes de groupes d'attributs
+        // (ligne 0, colonnes > objCol) AVANT de sortir
         
+        if (i == 0 && j <= objCol) return; // Coins haut-gauche (groupe d'objet + nom d'objet)
+        
+        // ✅ NOUVEAU : Menu contextuel pour les groupes d'attributs (ligne 0)
+        if (i == 0 && j > objCol) {
+            groupHeaderPopupMenu.show(e.getComponent(), e.getX(), e.getY());
+            return;
+        }
+        
+        // Données (lignes 2+)
         if (i > 1 && j > objCol) {
             if (matrix.getSelectedColumn() <= objCol || matrix.getSelectedRow() <= 1)
                 matrix.selectCell(i, j);
@@ -461,11 +471,13 @@ public class ContextEditor extends View {
             return;
         }
         
+        // Noms des objets (colonne objCol, lignes 2+)
         if (j == objCol && i > 1) {
             objectCellPopupMenu.show(e.getComponent(), e.getX(), e.getY()); 
             return;
         }
         
+        // En-têtes d'attributs (ligne 1, colonnes > objCol)
         if (i == 1 && j > objCol) {
             attributeCellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
         }
