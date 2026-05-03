@@ -1289,6 +1289,6 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
      * (FIX CASSE) Setter pour objectToGroupMap
      */
     public void setObjectToGroupMap(Map<String, String> newMap) {
-        this.objectToGroupMap = (newMap != null) ? new HashMap<>(newMap) : new HashMap<>();
+        this.objectToGroupMap = (Map<String, String>) ((newMap != null) ? new HashMap<>(newMap) : new HashMap<>());
     }
 }

@@ -9,6 +9,10 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
 
 import com.alee.extended.panel.WebAccordion;
 import com.alee.laf.button.WebButton;
@@ -23,6 +27,10 @@ import fcatools.conexpng.Conf;
 import fcatools.conexpng.io.locale.LocaleHandler;
 import fcatools.conexpng.model.FormalContext;
 
+/**
+ * ✅ FIX LATTICE GROUPS : Support complet des groupes d'objets
+ * identique au support des groupes d'attributs
+ */
 public class LatticeSettings extends WebAccordion {
 
     private static final long serialVersionUID = 3981827958628799515L;
@@ -31,8 +39,12 @@ public class LatticeSettings extends WebAccordion {
     private List<WebCheckBox> attributeCheckBoxes;
     private List<WebCheckBox> objectCheckBoxes;
     
-    private boolean withGroups = true;
-    private WebButton switchModeButton;
+    // ✅ NOUVEAU : Mode pour les OBJETS (comme pour les attributs)
+    private boolean withGroupsAttributes = true;
+    private boolean withGroupsObjects = true;
+    
+    private WebButton switchModeButtonAttributes;
+    private WebButton switchModeButtonObjects;
 
     public LatticeSettings(Conf state) {
         this.state = state;
@@ -174,15 +186,15 @@ public class LatticeSettings extends WebAccordion {
         // ── BOUTONS (même style que Objects) ──────────────────────────────
         WebPanel buttonsPanel = new WebPanel(new GridLayout(0, 2, 3, 3));
 
-        switchModeButton = new WebButton(withGroups ? "Switch to Attributes" : "Switch to Groups");
-        switchModeButton.setVisible(hasGroups);
-        switchModeButton.addActionListener(new ActionListener() {
+        switchModeButtonAttributes = new WebButton(withGroupsAttributes ? "Switch to Attributes" : "Switch to Groups");
+        switchModeButtonAttributes.setVisible(hasGroups);
+        switchModeButtonAttributes.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                withGroups = !withGroups;
+                withGroupsAttributes = !withGroupsAttributes;
                 update(state);
             }
         });
-        if (hasGroups) buttonsPanel.add(switchModeButton);
+        if (hasGroups) buttonsPanel.add(switchModeButtonAttributes);
 
         WebButton showAllButton = new WebButton("Show All");
         showAllButton.addActionListener(new ActionListener() {
@@ -238,7 +250,7 @@ public class LatticeSettings extends WebAccordion {
                 attributeCheckBoxes.add(cb);
             }
 
-        } else if (withGroups) {
+        } else if (withGroupsAttributes) {
             // ── GROUPES + MODE WITH GROUPS ─────────────────────────────────
             for (final fcatools.conexpng.model.AttributeGroup group : context.getAllAttributeGroups()) {
                 gbc.gridy++;
@@ -347,29 +359,273 @@ public class LatticeSettings extends WebAccordion {
         return new WebScrollPane(outerPanel);
     }
 
+    /**
+     * ✅ FIX OBJECT PANEL : Ajout du support des groupes d'objets
+     * IDENTIQUE à getAttributePanel() mais pour les objets
+     */
     private WebScrollPane getObjectPanel() {
-        WebPanel panel = new WebPanel(new BorderLayout());
-        panel.setLayout(new GridBagLayout());
+        WebPanel outerPanel = new WebPanel(new BorderLayout());
+
+        // ✅ DÉTECTION des groupes d'objets (via objectToGroupMap)
+        boolean hasObjectGroups = context.hasObjectGroups();
+
+        // ── BOUTONS (Show All / Hide All / Switch Mode) ──────────────────
+        WebPanel buttonsPanel = new WebPanel(new GridLayout(0, 2, 3, 3));
+
+        switchModeButtonObjects = new WebButton(withGroupsObjects ? "Switch to Objects" : "Switch to Groups");
+        switchModeButtonObjects.setVisible(hasObjectGroups);
+        switchModeButtonObjects.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                withGroupsObjects = !withGroupsObjects;
+                update(state);
+            }
+        });
+        if (hasObjectGroups) buttonsPanel.add(switchModeButtonObjects);
+
+        WebButton showAllButton = new WebButton("Show All");
+        showAllButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                state.context.clearConsidered();
+                state.temporaryContextChanged();
+                update(state);
+            }
+        });
+        buttonsPanel.add(showAllButton);
+
+        WebButton hideAllButton = new WebButton("Hide All");
+        hideAllButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                for (FullObject<String, String> obj : context.getObjects()) {
+                    state.context.dontConsiderObject(obj);
+                }
+                state.temporaryContextChanged();
+                update(state);
+            }
+        });
+        buttonsPanel.add(hideAllButton);
+
+        outerPanel.add(buttonsPanel, BorderLayout.NORTH);
+
+        // ── CONTENU (hiérarchie objets + groupes) ────────────────────────
+        WebPanel panel = new WebPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.anchor = GridBagConstraints.WEST;
         gbc.gridx  = 0;
         gbc.gridy  = 0;
-        for (FullObject<String, String> s : context.getObjects()) {
-            gbc.gridy++;
-            final WebCheckBox box  = new WebCheckBox(s.getIdentifier());
-            final FullObject<String, String> temp = s;
-            box.setSelected(!state.context.getDontConsideredObj().contains(temp));
-            box.addActionListener(new ActionListener() {
-                public void actionPerformed(ActionEvent arg0) {
-                    if (!box.isSelected()) state.context.dontConsiderObject(temp);
-                    else                   state.context.considerObject(temp);
-                    state.temporaryContextChanged();
+
+        GridBagConstraints gbcSub = new GridBagConstraints();
+        gbcSub.anchor = GridBagConstraints.WEST;
+        gbcSub.gridx  = 0;
+        gbcSub.insets = new java.awt.Insets(0, 20, 0, 0);
+
+        if (!hasObjectGroups) {
+            // ══════════════════════════════════════════════════════════════
+            // CAS 1 : AUCUN GROUPE D'OBJETS → Liste plate
+            // ══════════════════════════════════════════════════════════════
+            for (FullObject<String, String> s : context.getObjects()) {
+                gbc.gridy++;
+                final WebCheckBox box  = new WebCheckBox(s.getIdentifier());
+                final FullObject<String, String> temp = s;
+                box.setSelected(!state.context.getDontConsideredObj().contains(temp));
+                box.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent arg0) {
+                        if (!box.isSelected()) state.context.dontConsiderObject(temp);
+                        else                   state.context.considerObject(temp);
+                        state.temporaryContextChanged();
+                    }
+                });
+                panel.add(box, gbc);
+                objectCheckBoxes.add(box);
+            }
+
+        } else if (withGroupsObjects) {
+            // ══════════════════════════════════════════════════════════════
+            // CAS 2 : GROUPES D'OBJETS + MODE "WITH GROUPS"
+            // ══════════════════════════════════════════════════════════════
+            
+            // Construire la map inverse : groupName → List<objectName>
+            Map<String, List<String>> groupToObjects = new HashMap<>();
+            for (FullObject<String, String> obj : context.getObjects()) {
+                String objName = obj.getIdentifier();
+                String groupName = context.getGroupNameForObject(objName);
+                if (groupName != null) {
+                    if (!groupToObjects.containsKey(groupName)) {
+                        groupToObjects.put(groupName, new ArrayList<String>());
+                    }
+                    groupToObjects.get(groupName).add(objName);
                 }
-            });
-            panel.add(box, gbc);
-            objectCheckBoxes.add(box);
+            }
+
+            // Afficher chaque groupe + ses objets
+            for (final String groupName : groupToObjects.keySet()) {
+                gbc.gridy++;
+                final List<String> objectsInGroup = groupToObjects.get(groupName);
+                
+                // Checkbox du groupe (cliquable, contrôle tous les objets)
+                final WebCheckBox groupCb = new WebCheckBox(groupName);
+                boolean allChecked = true;
+                for (String objName : objectsInGroup) {
+                    FullObject<String, String> obj = context.getObject(objName);
+                    if (state.context.getDontConsideredObj().contains(obj)) {
+                        allChecked = false;
+                        break;
+                    }
+                }
+                groupCb.setSelected(allChecked);
+                groupCb.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        for (String objName : objectsInGroup) {
+                            FullObject<String, String> obj = context.getObject(objName);
+                            if (!groupCb.isSelected()) state.context.dontConsiderObject(obj);
+                            else                       state.context.considerObject(obj);
+                        }
+                        state.temporaryContextChanged();
+                    }
+                });
+                panel.add(groupCb, gbc);
+
+                // Afficher chaque objet du groupe (grisé, non cliquable)
+                for (final String objName : objectsInGroup) {
+                    gbc.gridy++;
+                    gbcSub.gridy = gbc.gridy;
+                    final FullObject<String, String> obj = context.getObject(objName);
+                    final WebCheckBox objCb = new WebCheckBox("  \u2514\u2500 " + objName);
+                    objCb.setEnabled(false);
+                    objCb.setForeground(Color.GRAY);
+                    objCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                    panel.add(objCb, gbcSub);
+                    objectCheckBoxes.add(objCb);
+                }
+            }
+
+            // Objets sans groupe (orphelins) : créer un groupe fictif
+            List<String> ungroupedObjects = new ArrayList<>();
+            for (FullObject<String, String> obj : context.getObjects()) {
+                String objName = obj.getIdentifier();
+                if (context.getGroupNameForObject(objName) == null) {
+                    ungroupedObjects.add(objName);
+                }
+            }
+            for (final String objName : ungroupedObjects) {
+                gbc.gridy++;
+                final FullObject<String, String> obj = context.getObject(objName);
+                
+                // Groupe fictif (nom de l'objet en MAJUSCULES)
+                final WebCheckBox fictCb = new WebCheckBox(objName.toUpperCase());
+                fictCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                fictCb.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        if (!fictCb.isSelected()) state.context.dontConsiderObject(obj);
+                        else                      state.context.considerObject(obj);
+                        state.temporaryContextChanged();
+                    }
+                });
+                panel.add(fictCb, gbc);
+                
+                gbc.gridy++;
+                gbcSub.gridy = gbc.gridy;
+                final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + objName);
+                orphCb.setEnabled(false);
+                orphCb.setForeground(Color.GRAY);
+                orphCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                panel.add(orphCb, gbcSub);
+                objectCheckBoxes.add(orphCb);
+            }
+
+        } else {
+            // ══════════════════════════════════════════════════════════════
+            // CAS 3 : GROUPES D'OBJETS + MODE "WITHOUT GROUPS"
+            // ══════════════════════════════════════════════════════════════
+            
+            // Construire la map inverse : groupName → List<objectName>
+            Map<String, List<String>> groupToObjects = new HashMap<>();
+            for (FullObject<String, String> obj : context.getObjects()) {
+                String objName = obj.getIdentifier();
+                String groupName = context.getGroupNameForObject(objName);
+                if (groupName != null) {
+                    if (!groupToObjects.containsKey(groupName)) {
+                        groupToObjects.put(groupName, new ArrayList<String>());
+                    }
+                    groupToObjects.get(groupName).add(objName);
+                }
+            }
+
+            // Afficher chaque groupe + ses objets
+            for (final String groupName : groupToObjects.keySet()) {
+                gbc.gridy++;
+                final List<String> objectsInGroup = groupToObjects.get(groupName);
+                
+                // Checkbox du groupe (grisée, non cliquable)
+                final WebCheckBox groupCb = new WebCheckBox(groupName);
+                groupCb.setEnabled(false);
+                groupCb.setForeground(Color.GRAY);
+                boolean allChecked = true;
+                for (String objName : objectsInGroup) {
+                    FullObject<String, String> obj = context.getObject(objName);
+                    if (state.context.getDontConsideredObj().contains(obj)) {
+                        allChecked = false;
+                        break;
+                    }
+                }
+                groupCb.setSelected(allChecked);
+                panel.add(groupCb, gbc);
+
+                // Afficher chaque objet du groupe (cliquable individuellement)
+                for (final String objName : objectsInGroup) {
+                    gbc.gridy++;
+                    gbcSub.gridy = gbc.gridy;
+                    final FullObject<String, String> obj = context.getObject(objName);
+                    final WebCheckBox objCb = new WebCheckBox("  \u2514\u2500 " + objName);
+                    objCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                    objCb.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent e) {
+                            if (!objCb.isSelected()) state.context.dontConsiderObject(obj);
+                            else                      state.context.considerObject(obj);
+                            state.temporaryContextChanged();
+                        }
+                    });
+                    panel.add(objCb, gbcSub);
+                    objectCheckBoxes.add(objCb);
+                }
+            }
+
+            // Objets sans groupe (orphelins)
+            List<String> ungroupedObjects = new ArrayList<>();
+            for (FullObject<String, String> obj : context.getObjects()) {
+                String objName = obj.getIdentifier();
+                if (context.getGroupNameForObject(objName) == null) {
+                    ungroupedObjects.add(objName);
+                }
+            }
+            for (final String objName : ungroupedObjects) {
+                gbc.gridy++;
+                final FullObject<String, String> obj = context.getObject(objName);
+                
+                // Groupe fictif (grisé)
+                final WebCheckBox fictCb = new WebCheckBox(objName.toUpperCase());
+                fictCb.setEnabled(false);
+                fictCb.setForeground(Color.GRAY);
+                fictCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                panel.add(fictCb, gbc);
+                
+                gbc.gridy++;
+                gbcSub.gridy = gbc.gridy;
+                final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + objName);
+                orphCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                orphCb.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        if (!orphCb.isSelected()) state.context.dontConsiderObject(obj);
+                        else                      state.context.considerObject(obj);
+                        state.temporaryContextChanged();
+                    }
+                });
+                panel.add(orphCb, gbcSub);
+                objectCheckBoxes.add(orphCb);
+            }
         }
-        return new WebScrollPane(panel);
+
+        outerPanel.add(panel, BorderLayout.CENTER);
+        return new WebScrollPane(outerPanel);
     }
 
     public void update(Conf state) {
