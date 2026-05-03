@@ -21,7 +21,7 @@ import static fcatools.conexpng.Util.clamp;
  * that the context is changed (not the JTable per se) and the JTable is redrawn
  * based on the updated context.
  * 
- * (F1) ÉTAPE 2 : Ligne 0 = noms des groupes, Ligne 1 = noms attributs, Data à partir de ligne 2
+ * ✅ FIX CASSE : renameAttribute() et renameObject() forcent la casse correcte
  */
 public class ContextMatrixModel extends AbstractTableModel implements Reorderable {
 
@@ -418,28 +418,60 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         return context.getObjectAtIndex(i).getIdentifier();
     }
 
+    /**
+     * ✅ FIX CASSE + UNICITÉ : Renommer un attribut
+     * Force minuscule et vérifie l'unicité
+     */
     public boolean renameAttribute(String oldName, String newName) {
-        if (context.existsAttributeAlready(newName)) {
+        if (oldName == null || newName == null || oldName.isEmpty() || newName.isEmpty()) {
+            System.out.println("[F1-CASSE] renameAttribute échoué: paramètres vides");
             return false;
-        } else {
-            state.saveConf();
-            context.renameAttribute(oldName, newName);
-            state.contextChanged();
-            state.getContextEditorUndoManager().makeRedoable();
-            return true;
         }
+        
+        // ✅ FIX CASSE : Force minuscule pour les attributs
+        String oldNameLower = oldName.toLowerCase();
+        String newNameLower = newName.toLowerCase();
+        
+        // ✅ FIX UNICITÉ : Vérifier que newName n'existe pas (sauf si c'est la même)
+        if (!oldNameLower.equals(newNameLower) && context.existsAttributeAlready(newNameLower)) {
+            System.out.println("[F1-CASSE] renameAttribute échoué: '" + newNameLower + "' existe déjà");
+            return false;
+        }
+        
+        System.out.println("[F1-CASSE] Calling context.renameAttribute: " + oldNameLower + " → " + newNameLower);
+        state.saveConf();
+        context.renameAttribute(oldNameLower, newNameLower);
+        state.contextChanged();
+        state.getContextEditorUndoManager().makeRedoable();
+        return true;
     }
 
+    /**
+     * ✅ FIX CASSE + UNICITÉ : Renommer un objet
+     * Force minuscule et vérifie l'unicité
+     */
     public boolean renameObject(String oldName, String newName) {
-        if (context.existsObjectAlready(newName)) {
+        if (oldName == null || newName == null || oldName.isEmpty() || newName.isEmpty()) {
+            System.out.println("[F1-CASSE] renameObject échoué: paramètres vides");
             return false;
-        } else {
-            state.saveConf();
-            context.renameObject(oldName, newName);
-            state.getContextEditorUndoManager().makeRedoable();
-            state.contextChanged();
-            return true;
         }
+        
+        // ✅ FIX CASSE : Force minuscule pour les objets
+        String oldNameLower = oldName.toLowerCase();
+        String newNameLower = newName.toLowerCase();
+        
+        // ✅ FIX UNICITÉ : Vérifier que newName n'existe pas
+        if (!oldNameLower.equals(newNameLower) && context.existsObjectAlready(newNameLower)) {
+            System.out.println("[F1-CASSE] renameObject échoué: '" + newNameLower + "' existe déjà");
+            return false;
+        }
+        
+        System.out.println("[F1-CASSE] Calling context.renameObject: " + oldNameLower + " → " + newNameLower);
+        state.saveConf();
+        context.renameObject(oldNameLower, newNameLower);
+        state.getContextEditorUndoManager().makeRedoable();
+        state.contextChanged();
+        return true;
     }
 
     public void reorderRows(int from, int to) {

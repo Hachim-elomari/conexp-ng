@@ -28,6 +28,7 @@ import de.tudresden.inf.tcs.fcaapi.utils.IndexedSet;
  * are extremely inefficient.
  * 
  * (F1) MODIFIÉ : Auto-assigne les attributs orphelins à des groupes portant leur nom en MAJUSCULES
+ * ✅ FIX CASSE : Force minuscule pour attributs/objets, MAJUSCULE pour groupes
  */
 
 
@@ -53,8 +54,20 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
     
     @Override
     public boolean addAttribute(String attribute) throws IllegalAttributeException {
-        if (super.addAttribute(attribute)) {
-            objectsOfAttribute.put(attribute, new TreeSet<String>());
+        if (attribute == null || attribute.isEmpty()) return false;
+        
+        // ✅ FIX CASSE : Force minuscule pour les attributs
+        String attrLower = attribute.toLowerCase();
+        
+        // ✅ FIX UNICITÉ : Vérifier si existe déjà (insensible à la casse)
+        if (existsAttributeAlready(attrLower)) {
+            System.out.println("[F1-CASSE] Attribut '" + attrLower + "' existe déjà, ignored");
+            return false;
+        }
+        
+        if (super.addAttribute(attrLower)) {
+            objectsOfAttribute.put(attrLower, new TreeSet<String>());
+            System.out.println("[F1-CASSE] Attribut ajouté : " + attrLower);
             return true;
         } else
             return false;
@@ -63,8 +76,11 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
     @Override
     public boolean addAttributeToObject(String attribute, String id) throws IllegalAttributeException,
             IllegalObjectException {
-        if (super.addAttributeToObject(attribute, id)) {
-            SortedSet<String> objects = objectsOfAttribute.get(attribute);
+        // Force minuscule
+        String attrLower = attribute != null ? attribute.toLowerCase() : attribute;
+        
+        if (super.addAttributeToObject(attrLower, id)) {
+            SortedSet<String> objects = objectsOfAttribute.get(attrLower);
             if (objects != null)
                 objects.add(id);
             return true;
@@ -74,10 +90,23 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
 
     @Override
     public boolean addObject(FullObject<String, String> arg0) throws IllegalObjectException {
-        if (super.addObject(arg0)) {
-            for (String attribute : arg0.getDescription().getAttributes()) {
-                objectsOfAttribute.get(attribute).add(arg0.getIdentifier());
+        if (arg0 == null) return false;
+        
+        // ✅ FIX CASSE : Force minuscule pour les objets
+        String objNameLower = arg0.getIdentifier().toLowerCase();
+        FullObject<String, String> objLower = new FullObject<>(objNameLower, arg0.getDescription().getAttributes());
+        
+        // ✅ FIX UNICITÉ : Vérifier si existe déjà
+        if (existsObjectAlready(objNameLower)) {
+            System.out.println("[F1-CASSE] Objet '" + objNameLower + "' existe déjà, ignored");
+            return false;
+        }
+        
+        if (super.addObject(objLower)) {
+            for (String attribute : objLower.getDescription().getAttributes()) {
+                objectsOfAttribute.get(attribute).add(objNameLower);
             }
+            System.out.println("[F1-CASSE] Objet ajouté : " + objNameLower);
             return true;
         }
         return false;
@@ -86,8 +115,10 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
     @Override
     public boolean removeAttributeFromObject(String attribute, String id) throws IllegalAttributeException,
             IllegalObjectException {
-        if (super.removeAttributeFromObject(attribute, id)) {
-            SortedSet<String> objects = objectsOfAttribute.get(attribute);
+        String attrLower = attribute != null ? attribute.toLowerCase() : attribute;
+        
+        if (super.removeAttributeFromObject(attrLower, id)) {
+            SortedSet<String> objects = objectsOfAttribute.get(attrLower);
             if (objects != null)
                 objects.remove(id);
             return true;
@@ -681,21 +712,38 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
     }
 
     public void renameAttribute(String oldName, String newName) {
+        if (oldName == null || newName == null || oldName.isEmpty() || newName.isEmpty()) {
+            System.out.println("[F1-CASSE] Rename échoué: oldName=" + oldName + ", newName=" + newName);
+            return;
+        }
+        
+        // ✅ FIX CASSE : Force minuscule pour les attributs
+        String oldNameLower = oldName.toLowerCase();
+        String newNameLower = newName.toLowerCase();
+        
+        // ✅ FIX UNICITÉ : Vérifier que newName n'existe pas (insensible à la casse)
+        if (!oldNameLower.equals(newNameLower) && existsAttributeAlready(newNameLower)) {
+            System.out.println("[F1-CASSE] Rename échoué: '" + newNameLower + "' existe déjà");
+            return;
+        }
+        
+        System.out.println("[F1-CASSE] Renaming attribute: " + oldNameLower + " → " + newNameLower);
+        
         IndexedSet<String> newAttributes = new ListSet<>();
         IndexedSet<FullObject<String, String>> filteredObjects = new ListSet<>();
         for (FullObject<String, String> object : objects) {
-            if (objectHasAttribute(object, oldName)) {
+            if (objectHasAttribute(object, oldNameLower)) {
                 filteredObjects.add(object);
                 try {
-                    removeAttributeFromObject(oldName, object.getIdentifier());
+                    removeAttributeFromObject(oldNameLower, object.getIdentifier());
                 } catch (IllegalObjectException e) {
                     e.printStackTrace();
                 }
             }
         }
         for (String attribute : getAttributes()) {
-            if (attribute.equals(oldName)) {
-                newAttributes.add(newName);
+            if (attribute.equals(oldNameLower)) {
+                newAttributes.add(newNameLower);
             } else {
                 newAttributes.add(attribute);
             }
@@ -706,43 +754,78 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
         }
         for (FullObject<String, String> object : filteredObjects) {
             try {
-                addAttributeToObject(newName, object.getIdentifier());
+                addAttributeToObject(newNameLower, object.getIdentifier());
             } catch (IllegalObjectException e) {
                 e.printStackTrace();
             }
         }
+        
+        // ✅ FIX GROUPES : Renommer dans les groupes aussi
+        AttributeGroup group = getGroupForAttribute(oldNameLower);
+        if (group != null) {
+            group.removeAttribute(oldNameLower);
+            group.addAttribute(newNameLower);
+            System.out.println("[F1-CASSE] Attribut renommé dans le groupe '" + group.getGroupName() + "'");
+        }
     }
 
     public void renameObject(String oldName, String newName) {
+        if (oldName == null || newName == null || oldName.isEmpty() || newName.isEmpty()) {
+            System.out.println("[F1-CASSE] Rename échoué: oldName=" + oldName + ", newName=" + newName);
+            return;
+        }
+        
+        // ✅ FIX CASSE : Force minuscule pour les objets
+        String oldNameLower = oldName.toLowerCase();
+        String newNameLower = newName.toLowerCase();
+        
+        // ✅ FIX UNICITÉ : Vérifier que newName n'existe pas
+        if (!oldNameLower.equals(newNameLower) && existsObjectAlready(newNameLower)) {
+            System.out.println("[F1-CASSE] Rename échoué: '" + newNameLower + "' existe déjà");
+            return;
+        }
+        
+        System.out.println("[F1-CASSE] Renaming object: " + oldNameLower + " → " + newNameLower);
+        
         IndexedSet<FullObject<String, String>> newObjects = new ListSet<>();
-        // IndexedSet<String> filteredAttributes = new ListSet<>();
         for (FullObject<String, String> object : objects) {
-            if (object.getIdentifier().equals(oldName)) {
-                newObjects.add(new FullObject<String, String>(newName, getAttributesForObject(oldName)));
+            if (object.getIdentifier().equals(oldNameLower)) {
+                newObjects.add(new FullObject<String, String>(newNameLower, getAttributesForObject(oldNameLower)));
             } else {
                 newObjects.add(object);
             }
         }
         objects = newObjects;
         for (SortedSet<String> objects : objectsOfAttribute.values()) {
-            if (objects.contains(oldName)) {
-                objects.remove(oldName);
-                objects.add(newName);
+            if (objects.contains(oldNameLower)) {
+                objects.remove(oldNameLower);
+                objects.add(newNameLower);
             }
+        }
+        
+        // ✅ FIX GROUPES D'OBJETS : Renommer dans objectToGroupMap aussi
+        if (objectToGroupMap.containsKey(oldNameLower)) {
+            String groupName = objectToGroupMap.remove(oldNameLower);
+            objectToGroupMap.put(newNameLower, groupName);
+            System.out.println("[F1-CASSE] Objet renommé dans le groupe '" + groupName + "'");
         }
     }
 
     public boolean existsAttributeAlready(String name) {
+        if (name == null) return false;
+        String nameLower = name.toLowerCase();
         for (String attribute : getAttributes()) {
-            if (attribute.equals(name))
+            if (attribute.toLowerCase().equals(nameLower))
                 return true;
         }
         return false;
     }
 
     public boolean existsObjectAlready(String name) {
+        if (name == null) return false;
+        String nameLower = name.toLowerCase();
         for (FullObject<String, String> object : objects) {
-            if (object.getIdentifier().equals(name))
+            if (object.getIdentifier().toLowerCase().equals(nameLower))
                 return true;
         }
         return false;
@@ -798,31 +881,38 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
     }
 
     public void addObjectAt(FullObject<String, String> object, int i) {
+        // ✅ FIX CASSE : Force minuscule pour le nouvel objet
+        String objNameLower = object.getIdentifier().toLowerCase();
+        FullObject<String, String> objLower = new FullObject<>(objNameLower, object.getDescription().getAttributes());
+        
         IndexedSet<FullObject<String, String>> newObjects = new ListSet<>();
         for (int j = 0; j < getObjectCount(); j++) {
             if (j == i)
-                newObjects.add(object);
+                newObjects.add(objLower);
             newObjects.add(getObjectAtIndex(j));
         }
         if (i == getObjectCount())
-            newObjects.add(object);
+            newObjects.add(objLower);
         objects = newObjects;
     }
 
     public void addAttributeAt(String attribute, int i) {
+        // ✅ FIX CASSE : Force minuscule pour le nouvel attribut
+        String attrLower = attribute != null ? attribute.toLowerCase() : "attr";
+        
         IndexedSet<String> newAttributes = new ListSet<>();
         for (int j = 0; j < getAttributeCount(); j++) {
             if (j == i)
-                newAttributes.add(attribute);
+                newAttributes.add(attrLower);
             newAttributes.add(getAttributeAtIndex(j));
         }
         if (i == getAttributeCount())
-            newAttributes.add(attribute);
+            newAttributes.add(attrLower);
         getAttributes().clear();
         for (String attr : newAttributes) {
             getAttributes().add(attr);
         }
-        objectsOfAttribute.put(attribute, new TreeSet<String>());
+        objectsOfAttribute.put(attrLower, new TreeSet<String>());
     }
 
     public TreeSet<String> intersection(Set<String> firstSet, Set<String> secondSet) {
@@ -931,7 +1021,7 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
  
     /**
      * Create a new attribute group with the given name and attributes
-     * @param groupName Name for the group (e.g., "Conditions Météo")
+     * @param groupName Name for the group (e.g., "CONDITIONS MÉTÉO")
      * @param attributeNames Set of attribute names to add to the group
      * @return The generated group ID (e.g., "group_0")
      */
@@ -1186,5 +1276,19 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
      */
     public boolean hasAttributeGroupManager() {
         return this.attributeGroupManager != null;
+    }
+
+    /**
+     * (FIX CASSE) Getter pour objectToGroupMap
+     */
+    public Map<String, String> getObjectToGroupMap() {
+        return new HashMap<>(objectToGroupMap);
+    }
+
+    /**
+     * (FIX CASSE) Setter pour objectToGroupMap
+     */
+    public void setObjectToGroupMap(Map<String, String> newMap) {
+        this.objectToGroupMap = (newMap != null) ? new HashMap<>(newMap) : new HashMap<>();
     }
 }

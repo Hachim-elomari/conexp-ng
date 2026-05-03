@@ -429,8 +429,28 @@ public class ContextEditor extends View {
                 int i = matrix.rowAtPoint(e.getPoint());
                 int j = matrix.columnAtPoint(e.getPoint());
                 int clicks = e.getClickCount();
+                
                 if (clicks >= 2 && clicks % 2 == 0 && SwingUtilities.isLeftMouseButton(e)) {
-                    if (i > 1 && j > 0) {
+                    // ✅ FIX DOUBLE-CLIC : Déterminer si c'est un rename ou un toggle
+                    boolean hasObjGroups = state.context.hasObjectGroups();
+                    int objColOffset = hasObjGroups ? 1 : 0;
+                    
+                    // Double-clic sur en-têtes (lignes 0 ou 1) → RENAME
+                    if (i <= 1 && j > objColOffset) {
+                        // Clic sur en-tête d'attribut → Rename attribute
+                        if (i == 1) {
+                            System.out.println("[F1-FIX] Double-clic RENAME sur en-tête attribut (ligne 1, col " + j + ")");
+                            invokeAction(ContextEditor.this, matrix.getActionMap().get("renameAttribute"));
+                        }
+                    }
+                    // Double-clic sur colonne d'objets (j == objColOffset, i > 1) → RENAME OBJET
+                    else if (i > 1 && j == objColOffset) {
+                        System.out.println("[F1-FIX] Double-clic RENAME sur en-tête objet (ligne " + i + ", col " + j + ")");
+                        invokeAction(ContextEditor.this, matrix.getActionMap().get("renameObject"));
+                    }
+                    // Double-clic sur données (i > 1, j > objColOffset) → TOGGLE
+                    else if (i > 1 && j > objColOffset) {
+                        System.out.println("[F1-FIX] Double-clic TOGGLE sur données (ligne " + i + ", col " + j + ")");
                         invokeAction(ContextEditor.this, new ToggleAction(i, j));
                     }
                 }
@@ -816,20 +836,44 @@ public class ContextEditor extends View {
     class RenameActiveObjectAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming || state.context.getObjectCount() == 0) return;
-            final String name = state.context.getObjectAtIndex(lastActiveRowIndex - 2).getIdentifier();
+            
+            // ✅ FIX DOUBLE-CLIC : Obtenir le NOM CORRECT de l'objet
+            // lastActiveRowIndex est 0-based pour les données (après avoir retiré 2 pour les en-têtes)
+            String objectName = state.context.getObjectAtIndex(lastActiveRowIndex - 2).getIdentifier();
+            
+            final String name = objectName;
             final JTextField t = matrix.renameRowHeader(lastActiveRowIndex);
-            Timer timer = new Timer(0, new ActionListener() { public void actionPerformed(ActionEvent e) { t.setText(name); t.selectAll(); } });
-            timer.setRepeats(false); timer.setInitialDelay(10); timer.start();
+            Timer timer = new Timer(0, new ActionListener() { 
+                public void actionPerformed(ActionEvent e) { 
+                    t.setText(name); 
+                    t.selectAll(); 
+                } 
+            });
+            timer.setRepeats(false); 
+            timer.setInitialDelay(10); 
+            timer.start();
         }
     }
 
     class RenameActiveAttributeAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
-            if (matrix.isRenaming || state.context.getObjectCount() == 0) return;
-            final String name = getClickedAttributeName(); if (name == null) return;
+            if (matrix.isRenaming || state.context.getAttributeCount() == 0) return;
+            
+            // ✅ FIX DOUBLE-CLIC : Obtenir le NOM CORRECT de l'attribut
+            String name = getClickedAttributeName(); 
+            if (name == null) return;
+            
+            final String nameToEdit = name;
             final JTextField t = matrix.renameColumnHeader(lastActiveColumnIndex);
-            Timer timer = new Timer(0, new ActionListener() { public void actionPerformed(ActionEvent e) { t.setText(name); t.selectAll(); } });
-            timer.setRepeats(false); timer.setInitialDelay(10); timer.start();
+            Timer timer = new Timer(0, new ActionListener() { 
+                public void actionPerformed(ActionEvent e) { 
+                    t.setText(nameToEdit); 
+                    t.selectAll(); 
+                } 
+            });
+            timer.setRepeats(false); 
+            timer.setInitialDelay(10); 
+            timer.start();
         }
     }
 
