@@ -5,8 +5,11 @@ import java.awt.Color;
 import java.awt.GridLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Cursor;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +45,10 @@ public class LatticeSettings extends WebAccordion {
     // ✅ NOUVEAU : Mode pour les OBJETS (comme pour les attributs)
     private boolean withGroupsAttributes = true;
     private boolean withGroupsObjects = true;
+    
+    // ✅ NOUVEAU : Collapse/Expand state pour chaque groupe
+    private Map<String, Boolean> attributeGroupExpanded = new HashMap<>();
+    private Map<String, Boolean> objectGroupExpanded = new HashMap<>();
     
     private WebButton switchModeButtonAttributes;
     private WebButton switchModeButtonObjects;
@@ -254,7 +261,15 @@ public class LatticeSettings extends WebAccordion {
             // ── GROUPES + MODE WITH GROUPS ─────────────────────────────────
             for (final fcatools.conexpng.model.AttributeGroup group : context.getAllAttributeGroups()) {
                 gbc.gridy++;
-                final WebCheckBox groupCb = new WebCheckBox(group.getGroupName());
+                
+                // ✅ CRÉER le panel composite [▼] [✓] [GENDER]
+                final WebPanel groupPanel = createExpandableGroupPanel(
+                    group.getGroupName(),
+                    attributeGroupExpanded,
+                    true
+                );
+                final WebCheckBox groupCb = (WebCheckBox) groupPanel.getClientProperty("checkbox");
+                
                 boolean allChecked = true;
                 for (String a : group.getAttributeNames())
                     if (state.context.getDontConsideredAttr().contains(a)) { allChecked = false; break; }
@@ -268,22 +283,32 @@ public class LatticeSettings extends WebAccordion {
                         state.temporaryContextChanged();
                     }
                 });
-                panel.add(groupCb, gbc);
+                panel.add(groupPanel, gbc);
 
-                for (final String attrName : group.getAttributeNames()) {
-                    gbc.gridy++;
-                    gbcSub.gridy = gbc.gridy;
-                    final WebCheckBox attrCb = new WebCheckBox("  \u2514\u2500 " + attrName);
-                    attrCb.setEnabled(false);
-                    attrCb.setForeground(Color.GRAY);
-                    attrCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                    panel.add(attrCb, gbcSub);
-                    attributeCheckBoxes.add(attrCb);
+                // ✅ AFFICHER les sous-éléments SEULEMENT si expanded
+                if (attributeGroupExpanded.get(group.getGroupName())) {
+                    for (final String attrName : group.getAttributeNames()) {
+                        gbc.gridy++;
+                        gbcSub.gridy = gbc.gridy;
+                        final WebCheckBox attrCb = new WebCheckBox("  \u2514\u2500 " + attrName);
+                        attrCb.setEnabled(false);
+                        attrCb.setForeground(Color.GRAY);
+                        attrCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                        panel.add(attrCb, gbcSub);
+                        attributeCheckBoxes.add(attrCb);
+                    }
                 }
             }
             for (final String attrName : context.getUngroupedAttributes()) {
                 gbc.gridy++;
-                final WebCheckBox fictCb = new WebCheckBox(attrName.toUpperCase());
+                
+                // ✅ Panel composite pour groupe fictif
+                final WebPanel fictPanel = createExpandableGroupPanel(
+                    attrName.toUpperCase(),
+                    attributeGroupExpanded,
+                    true
+                );
+                final WebCheckBox fictCb = (WebCheckBox) fictPanel.getClientProperty("checkbox");
                 fictCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
                 fictCb.addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
@@ -292,66 +317,92 @@ public class LatticeSettings extends WebAccordion {
                         state.temporaryContextChanged();
                     }
                 });
-                panel.add(fictCb, gbc);
-                gbc.gridy++;
-                gbcSub.gridy = gbc.gridy;
-                final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + attrName);
-                orphCb.setEnabled(false);
-                orphCb.setForeground(Color.GRAY);
-                orphCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                panel.add(orphCb, gbcSub);
-                attributeCheckBoxes.add(orphCb);
+                panel.add(fictPanel, gbc);
+                
+                // ✅ AFFICHER l'orphelin SEULEMENT si expanded
+                if (attributeGroupExpanded.get(attrName.toUpperCase())) {
+                    gbc.gridy++;
+                    gbcSub.gridy = gbc.gridy;
+                    final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + attrName);
+                    orphCb.setEnabled(false);
+                    orphCb.setForeground(Color.GRAY);
+                    orphCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                    panel.add(orphCb, gbcSub);
+                    attributeCheckBoxes.add(orphCb);
+                }
             }
 
         } else {
             // ── GROUPES + MODE WITHOUT GROUPS ──────────────────────────────
             for (final fcatools.conexpng.model.AttributeGroup group : context.getAllAttributeGroups()) {
                 gbc.gridy++;
-                final WebCheckBox groupCb = new WebCheckBox(group.getGroupName());
+                
+                // ✅ CRÉER le panel composite [▼] [✓] [GENDER]
+                final WebPanel groupPanel = createExpandableGroupPanel(
+                    group.getGroupName(),
+                    attributeGroupExpanded,
+                    true
+                );
+                final WebCheckBox groupCb = (WebCheckBox) groupPanel.getClientProperty("checkbox");
                 groupCb.setEnabled(false);
                 groupCb.setForeground(Color.GRAY);
+                
                 boolean allChecked = true;
                 for (String a : group.getAttributeNames())
                     if (state.context.getDontConsideredAttr().contains(a)) { allChecked = false; break; }
                 groupCb.setSelected(allChecked);
-                panel.add(groupCb, gbc);
+                panel.add(groupPanel, gbc);
 
-                for (final String attrName : group.getAttributeNames()) {
-                    gbc.gridy++;
-                    gbcSub.gridy = gbc.gridy;
-                    final WebCheckBox attrCb = new WebCheckBox("  \u2514\u2500 " + attrName);
-                    attrCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                    attrCb.addActionListener(new ActionListener() {
-                        public void actionPerformed(ActionEvent e) {
-                            if (!attrCb.isSelected()) state.context.dontConsiderAttribute(attrName);
-                            else                      state.context.considerAttribute(attrName);
-                            state.temporaryContextChanged();
-                        }
-                    });
-                    panel.add(attrCb, gbcSub);
-                    attributeCheckBoxes.add(attrCb);
+                // ✅ AFFICHER les sous-éléments SEULEMENT si expanded
+                if (attributeGroupExpanded.get(group.getGroupName())) {
+                    for (final String attrName : group.getAttributeNames()) {
+                        gbc.gridy++;
+                        gbcSub.gridy = gbc.gridy;
+                        final WebCheckBox attrCb = new WebCheckBox("  \u2514\u2500 " + attrName);
+                        attrCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                        attrCb.addActionListener(new ActionListener() {
+                            public void actionPerformed(ActionEvent e) {
+                                if (!attrCb.isSelected()) state.context.dontConsiderAttribute(attrName);
+                                else                      state.context.considerAttribute(attrName);
+                                state.temporaryContextChanged();
+                            }
+                        });
+                        panel.add(attrCb, gbcSub);
+                        attributeCheckBoxes.add(attrCb);
+                    }
                 }
             }
             for (final String attrName : context.getUngroupedAttributes()) {
                 gbc.gridy++;
-                final WebCheckBox fictCb = new WebCheckBox(attrName.toUpperCase());
+                
+                // ✅ Panel composite pour groupe fictif (grisé)
+                final WebPanel fictPanel = createExpandableGroupPanel(
+                    attrName.toUpperCase(),
+                    attributeGroupExpanded,
+                    true
+                );
+                final WebCheckBox fictCb = (WebCheckBox) fictPanel.getClientProperty("checkbox");
                 fictCb.setEnabled(false);
                 fictCb.setForeground(Color.GRAY);
                 fictCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                panel.add(fictCb, gbc);
-                gbc.gridy++;
-                gbcSub.gridy = gbc.gridy;
-                final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + attrName);
-                orphCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
-                orphCb.addActionListener(new ActionListener() {
-                    public void actionPerformed(ActionEvent e) {
-                        if (!orphCb.isSelected()) state.context.dontConsiderAttribute(attrName);
-                        else                      state.context.considerAttribute(attrName);
-                        state.temporaryContextChanged();
-                    }
-                });
-                panel.add(orphCb, gbcSub);
-                attributeCheckBoxes.add(orphCb);
+                panel.add(fictPanel, gbc);
+                
+                // ✅ AFFICHER l'orphelin SEULEMENT si expanded
+                if (attributeGroupExpanded.get(attrName.toUpperCase())) {
+                    gbc.gridy++;
+                    gbcSub.gridy = gbc.gridy;
+                    final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + attrName);
+                    orphCb.setSelected(!state.context.getDontConsideredAttr().contains(attrName));
+                    orphCb.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent e) {
+                            if (!orphCb.isSelected()) state.context.dontConsiderAttribute(attrName);
+                            else                      state.context.considerAttribute(attrName);
+                            state.temporaryContextChanged();
+                        }
+                    });
+                    panel.add(orphCb, gbcSub);
+                    attributeCheckBoxes.add(orphCb);
+                }
             }
         }
 
@@ -461,8 +512,14 @@ public class LatticeSettings extends WebAccordion {
                 gbc.gridy++;
                 final List<String> objectsInGroup = groupToObjects.get(groupName);
                 
-                // Checkbox du groupe (cliquable, contrôle tous les objets)
-                final WebCheckBox groupCb = new WebCheckBox(groupName);
+                // ✅ CRÉER le panel composite [▼] [✓] [GENDER]
+                final WebPanel groupPanel = createExpandableGroupPanel(
+                    groupName,
+                    objectGroupExpanded,
+                    false
+                );
+                final WebCheckBox groupCb = (WebCheckBox) groupPanel.getClientProperty("checkbox");
+                
                 boolean allChecked = true;
                 for (String objName : objectsInGroup) {
                     FullObject<String, String> obj = context.getObject(objName);
@@ -482,19 +539,21 @@ public class LatticeSettings extends WebAccordion {
                         state.temporaryContextChanged();
                     }
                 });
-                panel.add(groupCb, gbc);
+                panel.add(groupPanel, gbc);
 
-                // Afficher chaque objet du groupe (grisé, non cliquable)
-                for (final String objName : objectsInGroup) {
-                    gbc.gridy++;
-                    gbcSub.gridy = gbc.gridy;
-                    final FullObject<String, String> obj = context.getObject(objName);
-                    final WebCheckBox objCb = new WebCheckBox("  \u2514\u2500 " + objName);
-                    objCb.setEnabled(false);
-                    objCb.setForeground(Color.GRAY);
-                    objCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
-                    panel.add(objCb, gbcSub);
-                    objectCheckBoxes.add(objCb);
+                // ✅ AFFICHER les sous-éléments SEULEMENT si expanded
+                if (objectGroupExpanded.get(groupName)) {
+                    for (final String objName : objectsInGroup) {
+                        gbc.gridy++;
+                        gbcSub.gridy = gbc.gridy;
+                        final FullObject<String, String> obj = context.getObject(objName);
+                        final WebCheckBox objCb = new WebCheckBox("  \u2514\u2500 " + objName);
+                        objCb.setEnabled(false);
+                        objCb.setForeground(Color.GRAY);
+                        objCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                        panel.add(objCb, gbcSub);
+                        objectCheckBoxes.add(objCb);
+                    }
                 }
             }
 
@@ -510,8 +569,13 @@ public class LatticeSettings extends WebAccordion {
                 gbc.gridy++;
                 final FullObject<String, String> obj = context.getObject(objName);
                 
-                // Groupe fictif (nom de l'objet en MAJUSCULES)
-                final WebCheckBox fictCb = new WebCheckBox(objName.toUpperCase());
+                // ✅ Panel composite pour groupe fictif
+                final WebPanel fictPanel = createExpandableGroupPanel(
+                    objName.toUpperCase(),
+                    objectGroupExpanded,
+                    false
+                );
+                final WebCheckBox fictCb = (WebCheckBox) fictPanel.getClientProperty("checkbox");
                 fictCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
                 fictCb.addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
@@ -520,16 +584,19 @@ public class LatticeSettings extends WebAccordion {
                         state.temporaryContextChanged();
                     }
                 });
-                panel.add(fictCb, gbc);
+                panel.add(fictPanel, gbc);
                 
-                gbc.gridy++;
-                gbcSub.gridy = gbc.gridy;
-                final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + objName);
-                orphCb.setEnabled(false);
-                orphCb.setForeground(Color.GRAY);
-                orphCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
-                panel.add(orphCb, gbcSub);
-                objectCheckBoxes.add(orphCb);
+                // ✅ AFFICHER l'orphelin SEULEMENT si expanded
+                if (objectGroupExpanded.get(objName.toUpperCase())) {
+                    gbc.gridy++;
+                    gbcSub.gridy = gbc.gridy;
+                    final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + objName);
+                    orphCb.setEnabled(false);
+                    orphCb.setForeground(Color.GRAY);
+                    orphCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                    panel.add(orphCb, gbcSub);
+                    objectCheckBoxes.add(orphCb);
+                }
             }
 
         } else {
@@ -555,10 +622,16 @@ public class LatticeSettings extends WebAccordion {
                 gbc.gridy++;
                 final List<String> objectsInGroup = groupToObjects.get(groupName);
                 
-                // Checkbox du groupe (grisée, non cliquable)
-                final WebCheckBox groupCb = new WebCheckBox(groupName);
+                // ✅ CRÉER le panel composite [▼] [✓] [GENDER] (grisé)
+                final WebPanel groupPanel = createExpandableGroupPanel(
+                    groupName,
+                    objectGroupExpanded,
+                    false
+                );
+                final WebCheckBox groupCb = (WebCheckBox) groupPanel.getClientProperty("checkbox");
                 groupCb.setEnabled(false);
                 groupCb.setForeground(Color.GRAY);
+                
                 boolean allChecked = true;
                 for (String objName : objectsInGroup) {
                     FullObject<String, String> obj = context.getObject(objName);
@@ -568,24 +641,26 @@ public class LatticeSettings extends WebAccordion {
                     }
                 }
                 groupCb.setSelected(allChecked);
-                panel.add(groupCb, gbc);
+                panel.add(groupPanel, gbc);
 
-                // Afficher chaque objet du groupe (cliquable individuellement)
-                for (final String objName : objectsInGroup) {
-                    gbc.gridy++;
-                    gbcSub.gridy = gbc.gridy;
-                    final FullObject<String, String> obj = context.getObject(objName);
-                    final WebCheckBox objCb = new WebCheckBox("  \u2514\u2500 " + objName);
-                    objCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
-                    objCb.addActionListener(new ActionListener() {
-                        public void actionPerformed(ActionEvent e) {
-                            if (!objCb.isSelected()) state.context.dontConsiderObject(obj);
-                            else                      state.context.considerObject(obj);
-                            state.temporaryContextChanged();
-                        }
-                    });
-                    panel.add(objCb, gbcSub);
-                    objectCheckBoxes.add(objCb);
+                // ✅ AFFICHER les sous-éléments SEULEMENT si expanded
+                if (objectGroupExpanded.get(groupName)) {
+                    for (final String objName : objectsInGroup) {
+                        gbc.gridy++;
+                        gbcSub.gridy = gbc.gridy;
+                        final FullObject<String, String> obj = context.getObject(objName);
+                        final WebCheckBox objCb = new WebCheckBox("  \u2514\u2500 " + objName);
+                        objCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                        objCb.addActionListener(new ActionListener() {
+                            public void actionPerformed(ActionEvent e) {
+                                if (!objCb.isSelected()) state.context.dontConsiderObject(obj);
+                                else                      state.context.considerObject(obj);
+                                state.temporaryContextChanged();
+                            }
+                        });
+                        panel.add(objCb, gbcSub);
+                        objectCheckBoxes.add(objCb);
+                    }
                 }
             }
 
@@ -601,26 +676,34 @@ public class LatticeSettings extends WebAccordion {
                 gbc.gridy++;
                 final FullObject<String, String> obj = context.getObject(objName);
                 
-                // Groupe fictif (grisé)
-                final WebCheckBox fictCb = new WebCheckBox(objName.toUpperCase());
+                // ✅ Panel composite pour groupe fictif (grisé)
+                final WebPanel fictPanel = createExpandableGroupPanel(
+                    objName.toUpperCase(),
+                    objectGroupExpanded,
+                    false
+                );
+                final WebCheckBox fictCb = (WebCheckBox) fictPanel.getClientProperty("checkbox");
                 fictCb.setEnabled(false);
                 fictCb.setForeground(Color.GRAY);
                 fictCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
-                panel.add(fictCb, gbc);
+                panel.add(fictPanel, gbc);
                 
-                gbc.gridy++;
-                gbcSub.gridy = gbc.gridy;
-                final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + objName);
-                orphCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
-                orphCb.addActionListener(new ActionListener() {
-                    public void actionPerformed(ActionEvent e) {
-                        if (!orphCb.isSelected()) state.context.dontConsiderObject(obj);
-                        else                      state.context.considerObject(obj);
-                        state.temporaryContextChanged();
-                    }
-                });
-                panel.add(orphCb, gbcSub);
-                objectCheckBoxes.add(orphCb);
+                // ✅ AFFICHER l'orphelin SEULEMENT si expanded
+                if (objectGroupExpanded.get(objName.toUpperCase())) {
+                    gbc.gridy++;
+                    gbcSub.gridy = gbc.gridy;
+                    final WebCheckBox orphCb = new WebCheckBox("  \u2514\u2500 " + objName);
+                    orphCb.setSelected(!state.context.getDontConsideredObj().contains(obj));
+                    orphCb.addActionListener(new ActionListener() {
+                        public void actionPerformed(ActionEvent e) {
+                            if (!orphCb.isSelected()) state.context.dontConsiderObject(obj);
+                            else                      state.context.considerObject(obj);
+                            state.temporaryContextChanged();
+                        }
+                    });
+                    panel.add(orphCb, gbcSub);
+                    objectCheckBoxes.add(orphCb);
+                }
             }
         }
 
@@ -638,5 +721,74 @@ public class LatticeSettings extends WebAccordion {
         this.removePane(2);
         attributeCheckBoxes.clear();
         this.addPane(2, LocaleHandler.getString("LatticeSettings.LatticeSettings.pane.2"), getAttributePanel());
+    }
+
+    /**
+     * ✅ HELPER : Crée un panel composite avec triangle expand/collapse + checkbox
+     * 
+     * Layout : [▼/▶] [✓] [Nom du groupe]
+     * 
+     * @param groupName Le nom du groupe
+     * @param expandedMap La map qui track l'état expanded
+     * @param isAttribute true si attribut, false si objet
+     * @return Un WebPanel contenant triangle + checkbox
+     */
+    private WebPanel createExpandableGroupPanel(
+            final String groupName,
+            final Map<String, Boolean> expandedMap,
+            final boolean isAttribute) {
+        
+        // Initialiser l'état si absent (par défaut : expanded)
+        if (!expandedMap.containsKey(groupName)) {
+            expandedMap.put(groupName, true);
+        }
+        
+        final boolean isExpanded = expandedMap.get(groupName);
+        
+        // ── PANEL COMPOSITE avec BoxLayout horizontal ──────────────────
+        WebPanel panel = new WebPanel();
+        panel.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
+        panel.setOpaque(false);
+        
+        // ── TRIANGLE (JLabel cliquable) ────────────────────────────────
+        // Utiliser ► (\u25BA) au lieu de ▶ (\u25B6) pour meilleure compatibilité
+        final WebLabel triangleLabel = new WebLabel(isExpanded ? "\u25BC " : "\u25BA ");
+        triangleLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        triangleLabel.setFont(triangleLabel.getFont().deriveFont(12f)); // Taille lisible
+        
+        // MouseListener sur le triangle (zone LARGE et facile à cliquer)
+        triangleLabel.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // Toggle l'état expanded
+                boolean newState = !expandedMap.get(groupName);
+                expandedMap.put(groupName, newState);
+                
+                // Rafraîchir l'affichage
+                update(state);
+            }
+            
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                // Feedback visuel au survol
+                triangleLabel.setForeground(new Color(0, 120, 215)); // Bleu
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e) {
+                triangleLabel.setForeground(Color.BLACK);
+            }
+        });
+        
+        panel.add(triangleLabel);
+        
+        // ── CHECKBOX (sans le triangle dans le texte) ─────────────────
+        final WebCheckBox checkbox = new WebCheckBox(groupName);
+        panel.add(checkbox);
+        
+        // Stocker la checkbox pour y accéder plus tard
+        panel.putClientProperty("checkbox", checkbox);
+        
+        return panel;
     }
 }
