@@ -19,6 +19,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
+import java.util.List;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -83,8 +84,6 @@ public class ContextEditor extends View {
         groupHeaderPopupMenu   = new WebPopupMenu();
 
         matrixModel = new ContextMatrixModel(state);
-        
-        // ✅ FIX : Ajouter state comme 3ème paramètre au constructeur ContextMatrix
         matrix = new ContextMatrix(matrixModel, state.guiConf.columnWidths, state);
         
         JScrollPane scrollPane = matrix.createStripedJScrollPane(getBackground());
@@ -221,9 +220,12 @@ public class ContextEditor extends View {
 
         am.put("renameObject",             new RenameActiveObjectAction());
         am.put("renameAttribute",          new RenameActiveAttributeAction());
-        am.put("removeObject",             new RemoveActiveObjectAction());
         am.put("removeSelectedObjects",    new RemoveSelectedObjectsAction());
-        am.put("removeAttribute",          new RemoveActiveAttributeAction());
+        
+        // ✅ PATCH 3B : Remplacer "removeAttribute" par "deleteAttribute"
+        am.put("deleteAttribute",          new DeleteActiveAttributeAction());
+        am.put("deleteObject",             new DeleteActiveObjectAction());
+        
         am.put("removeSelectedAttributes", new RemoveSelectedAttributesAction());
         am.put("addObjectBelow",    new AddObjectAfterActiveAction());
         am.put("addObjectAbove",    new AddObjectBeforeActiveAction());
@@ -231,6 +233,11 @@ public class ContextEditor extends View {
         am.put("addAttributeRight", new AddAttributeAfterActiveAction());
         am.put("addAttributeLeft",  new AddAttributeBeforeActiveAction());
         am.put("addAttributeAtEnd", new AddAttributeAtEndAction());
+
+        // ✅ PATCH 3B : Enregistrer les 3 nouvelles actions
+        am.put("addAttributeLeftInGroup",   new AddAttributeLeftInGroupAction());
+        am.put("addAttributeRightInGroup",  new AddAttributeRightInGroupAction());
+        am.put("createNewAttributeInGroup", new CreateNewAttributeInGroupAction());
 
         am.put("toggle",  new ToggleActiveAction());
         am.put("invert",  new InvertAction());
@@ -292,8 +299,8 @@ public class ContextEditor extends View {
 
         im.put(getKeyStroke(KeyEvent.VK_R, 0), "renameObject");
         im.put(getKeyStroke(KeyEvent.VK_R, KeyEvent.SHIFT_MASK), "renameAttribute");
-        im.put(getKeyStroke(KeyEvent.VK_D, 0), "removeObject");
-        im.put(getKeyStroke(KeyEvent.VK_D, KeyEvent.SHIFT_MASK), "removeAttribute");
+        im.put(getKeyStroke(KeyEvent.VK_D, 0), "deleteObject");
+        im.put(getKeyStroke(KeyEvent.VK_D, KeyEvent.SHIFT_MASK), "deleteAttribute");
         im.put(getKeyStroke(KeyEvent.VK_O, 0), "addObjectBelow");
         im.put(getKeyStroke(KeyEvent.VK_O, KeyEvent.SHIFT_MASK), "addObjectAbove");
         im.put(getKeyStroke(KeyEvent.VK_A, 0), "addAttributeRight");
@@ -376,17 +383,21 @@ public class ContextEditor extends View {
         else showArrowRelationsButton.setSelected(false);
     }
 
+    // ✅ PATCH 3A : Remplacer entièrement createContextMenuActions()
     private void createContextMenuActions() {
         ActionMap am = matrix.getActionMap();
 
+        // ✅ MENU GROUPE D'ATTRIBUTS (clic droit sur groupe)
         addMenuItem(groupHeaderPopupMenu, "Rename Group",                        am.get("renameGroup"));
         addMenuItem(groupHeaderPopupMenu, "Generate Lattice for Group",          am.get("generateLatticeForGroup"));
+        addMenuItem(groupHeaderPopupMenu, "Create New Attribute in Group",       am.get("createNewAttributeInGroup"));
         addMenuItem(groupHeaderPopupMenu, "Add Attribute(s) to this Group",      am.get("addAttributesToGroup"));
         addMenuItem(groupHeaderPopupMenu, "Remove Attribute(s) from this Group", am.get("removeAttributesFromGroup"));
         groupHeaderPopupMenu.add(new WebPopupMenu.Separator());
         addMenuItem(groupHeaderPopupMenu, "Ungroup (keep attributes)",           am.get("ungroupAttribute"));
         addMenuItem(groupHeaderPopupMenu, "Delete Group + Attributes",           am.get("deleteGroupWithAttributes"));
 
+        // ✅ MENU DONNÉES (clic droit sur cellule)
         addMenuItem(cellPopupMenu,
             LocaleHandler.getString("ContextEditor.createContextMenuActions.selectAll"), am.get("selectAll"));
         cellPopupMenu.add(new WebPopupMenu.Separator());
@@ -404,23 +415,19 @@ public class ContextEditor extends View {
             LocaleHandler.getString("ContextEditor.createContextMenuActions.removeSelectedObjects"),
             am.get("removeSelectedObjects"));
 
+        // ✅ MENU OBJETS (clic droit sur nom d'objet)
         addMenuItem(objectCellPopupMenu,
             LocaleHandler.getString("ContextEditor.createContextMenuActions.renameObject"), am.get("renameObject"));
-        addMenuItem(objectCellPopupMenu,
-            LocaleHandler.getString("ContextEditor.createContextMenuActions.removeObject"), am.get("removeObject"));
-        addMenuItem(objectCellPopupMenu,
-            LocaleHandler.getString("ContextEditor.createContextMenuActions.addObjectAbove"), am.get("addObjectAbove"));
-        addMenuItem(objectCellPopupMenu,
-            LocaleHandler.getString("ContextEditor.createContextMenuActions.addObjectBelow"), am.get("addObjectBelow"));
+        addMenuItem(objectCellPopupMenu, "Delete Object",                                   am.get("deleteObject"));
+        addMenuItem(objectCellPopupMenu, "Add Above",                                       am.get("addObjectAbove"));
+        addMenuItem(objectCellPopupMenu, "Add Below",                                       am.get("addObjectBelow"));
 
+        // ✅ MENU ATTRIBUTS (clic droit sur nom d'attribut)
         addMenuItem(attributeCellPopupMenu,
             LocaleHandler.getString("ContextEditor.createContextMenuActions.renameAttribute"), am.get("renameAttribute"));
-        addMenuItem(attributeCellPopupMenu,
-            LocaleHandler.getString("ContextEditor.createContextMenuActions.removeAttribute"), am.get("removeAttribute"));
-        addMenuItem(attributeCellPopupMenu,
-            LocaleHandler.getString("ContextEditor.createContextMenuActions.addAttributeLeft"), am.get("addAttributeLeft"));
-        addMenuItem(attributeCellPopupMenu,
-            LocaleHandler.getString("ContextEditor.createContextMenuActions.addAttributeRight"), am.get("addAttributeRight"));
+        addMenuItem(attributeCellPopupMenu, "Delete Attribute",                               am.get("deleteAttribute"));
+        addMenuItem(attributeCellPopupMenu, "Add Left",                                       am.get("addAttributeLeft"));
+        addMenuItem(attributeCellPopupMenu, "Add Right",                                      am.get("addAttributeRight"));
     }
 
     private void createMouseActions() {
@@ -431,26 +438,18 @@ public class ContextEditor extends View {
                 int clicks = e.getClickCount();
                 
                 if (clicks >= 2 && clicks % 2 == 0 && SwingUtilities.isLeftMouseButton(e)) {
-                    // ✅ FIX DOUBLE-CLIC : Déterminer si c'est un rename ou un toggle
                     boolean hasObjGroups = state.context.hasObjectGroups();
                     int objColOffset = hasObjGroups ? 1 : 0;
                     
-                    // Double-clic sur en-têtes (lignes 0 ou 1) → RENAME
                     if (i <= 1 && j > objColOffset) {
-                        // Clic sur en-tête d'attribut → Rename attribute
                         if (i == 1) {
-                            System.out.println("[F1-FIX] Double-clic RENAME sur en-tête attribut (ligne 1, col " + j + ")");
                             invokeAction(ContextEditor.this, matrix.getActionMap().get("renameAttribute"));
                         }
                     }
-                    // Double-clic sur colonne d'objets (j == objColOffset, i > 1) → RENAME OBJET
                     else if (i > 1 && j == objColOffset) {
-                        System.out.println("[F1-FIX] Double-clic RENAME sur en-tête objet (ligne " + i + ", col " + j + ")");
                         invokeAction(ContextEditor.this, matrix.getActionMap().get("renameObject"));
                     }
-                    // Double-clic sur données (i > 1, j > objColOffset) → TOGGLE
                     else if (i > 1 && j > objColOffset) {
-                        System.out.println("[F1-FIX] Double-clic TOGGLE sur données (ligne " + i + ", col " + j + ")");
                         invokeAction(ContextEditor.this, new ToggleAction(i, j));
                     }
                 }
@@ -472,18 +471,13 @@ public class ContextEditor extends View {
         boolean hasObjGroups = state.context.hasObjectGroups();
         int objCol = hasObjGroups ? 1 : 0;
         
-        // ✅ FIX : Vérifier si on clique sur les en-têtes de groupes d'attributs
-        // (ligne 0, colonnes > objCol) AVANT de sortir
+        if (i == 0 && j <= objCol) return;
         
-        if (i == 0 && j <= objCol) return; // Coins haut-gauche (groupe d'objet + nom d'objet)
-        
-        // ✅ NOUVEAU : Menu contextuel pour les groupes d'attributs (ligne 0)
         if (i == 0 && j > objCol) {
             groupHeaderPopupMenu.show(e.getComponent(), e.getX(), e.getY());
             return;
         }
         
-        // Données (lignes 2+)
         if (i > 1 && j > objCol) {
             if (matrix.getSelectedColumn() <= objCol || matrix.getSelectedRow() <= 1)
                 matrix.selectCell(i, j);
@@ -491,17 +485,17 @@ public class ContextEditor extends View {
             return;
         }
         
-        // Noms des objets (colonne objCol, lignes 2+)
         if (j == objCol && i > 1) {
             objectCellPopupMenu.show(e.getComponent(), e.getX(), e.getY()); 
             return;
         }
         
-        // En-têtes d'attributs (ligne 1, colonnes > objCol)
         if (i == 1 && j > objCol) {
             attributeCellPopupMenu.show(e.getComponent(), e.getX(), e.getY());
         }
     }
+    
+    
 
     private AttributeGroup getClickedGroup() {
         Object val = matrixModel.getValueAt(0, lastActiveColumnIndex);
@@ -611,18 +605,11 @@ public class ContextEditor extends View {
             if (i <= 1 || j <= 0) return;
             int i = clamp(this.i - 2, 0, state.context.getObjectCount() - 1);
             
-            // ✅ FIX : Ajuster l'index de colonne en fonction de objColOffset
             boolean hasObjGroups = state.context.hasObjectGroups();
             int objColOffset = hasObjGroups ? 1 : 0;
-            
-            // Calculer l'index correct pour getAttributeAtVisualColumn()
-            // Les colonnes JTable sont : [0:groupe] [1:objet] [2+:attributs]
-            // Nous devons passer l'index relatif aux attributs, pas l'index global
             int attrColumnIndex = this.j - objColOffset - 1;
             
             state.saveConf();
-            
-            // ✅ Appeler avec l'index CORRIGÉ
             String attr = matrixModel.getAttributeAtVisualColumn(attrColumnIndex + 1);
             
             if (attr != null) {
@@ -720,12 +707,10 @@ public class ContextEditor extends View {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
             
-            // ✅ Vérifier les attributs orphelins AVANT le transpose
             if (!checkOrphanGroupingState()) {
                 return;
             }
             
-            // ✅ MODIFIÉ : Ne plus effacer les groupes, juste informer
             boolean hasGroups = !state.context.getAllAttributeGroups().isEmpty();
             if (hasGroups) {
                 int choice = JOptionPane.showConfirmDialog(
@@ -743,10 +728,6 @@ public class ContextEditor extends View {
                 }
             }
             
-            // ✅ NE PLUS effacer les groupes !
-            // state.context.getAttributeGroupManager().clear(); ← ENLEVER CETTE LIGNE
-            
-            // ✅ Transpose (qui va maintenant créer objectToGroupMap)
             state.saveConf();
             state.context.transpose();
             matrixModel.fireTableStructureChanged();
@@ -755,7 +736,6 @@ public class ContextEditor extends View {
             state.contextChanged();
             state.getContextEditorUndoManager().makeRedoable();
             
-            // ✅ Message de confirmation
             if (hasGroups) {
                 JOptionPane.showMessageDialog(
                     ContextEditor.this,
@@ -774,16 +754,19 @@ public class ContextEditor extends View {
         AddAttributeAtAction(int index) { this.index = index; }
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            state.saveConf(); 
+            
             matrix.saveSelection(); 
             addAttributeAt(index);
             
-            // ✅ FIX : Réorganiser les attributs après l'ajout pour que les groupes
-            // soient correctement positionnés visuellement
             if (!state.context.getAllAttributeGroups().isEmpty()) {
                 state.context.reorganizeAttributesForGroups();
             }
             
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate();
+            matrix.repaint();
+            
+            state.saveConf();
             matrix.restoreSelection(); 
             state.contextChanged(); 
             state.getContextEditorUndoManager().makeRedoable();
@@ -795,8 +778,18 @@ public class ContextEditor extends View {
         AddObjectAtAction(int index) { this.index = index; }
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming) return;
-            state.saveConf(); matrix.saveSelection(); addObjectAt(index);
-            matrix.restoreSelection(); state.contextChanged(); state.getContextEditorUndoManager().makeRedoable();
+            
+            matrix.saveSelection();
+            addObjectAt(index);
+            
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate();
+            matrix.repaint();
+            
+            state.saveConf();
+            matrix.restoreSelection();
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
         }
     }
 
@@ -836,11 +829,7 @@ public class ContextEditor extends View {
     class RenameActiveObjectAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming || state.context.getObjectCount() == 0) return;
-            
-            // ✅ FIX DOUBLE-CLIC : Obtenir le NOM CORRECT de l'objet
-            // lastActiveRowIndex est 0-based pour les données (après avoir retiré 2 pour les en-têtes)
             String objectName = state.context.getObjectAtIndex(lastActiveRowIndex - 2).getIdentifier();
-            
             final String name = objectName;
             final JTextField t = matrix.renameRowHeader(lastActiveRowIndex);
             Timer timer = new Timer(0, new ActionListener() { 
@@ -858,11 +847,8 @@ public class ContextEditor extends View {
     class RenameActiveAttributeAction extends AbstractAction {
         public void actionPerformed(ActionEvent e) {
             if (matrix.isRenaming || state.context.getAttributeCount() == 0) return;
-            
-            // ✅ FIX DOUBLE-CLIC : Obtenir le NOM CORRECT de l'attribut
             String name = getClickedAttributeName(); 
             if (name == null) return;
-            
             final String nameToEdit = name;
             final JTextField t = matrix.renameColumnHeader(lastActiveColumnIndex);
             Timer timer = new Timer(0, new ActionListener() { 
@@ -1100,19 +1086,339 @@ public class ContextEditor extends View {
     // Helpers
     // =========================================================================
 
+    private String generateNewObjectName() {
+        String newObjName = "obj0";
+        int counter = 0;
+        while (state.context.existsObjectAlready(newObjName)) {
+            newObjName = "obj" + (++counter);
+        }
+        return newObjName;
+    }
+
+    private String generateNewAttributeName() {
+        String newAttrName = "attr0";
+        int counter = 0;
+        while (state.context.existsAttributeAlready(newAttrName)) {
+            newAttrName = "attr" + (++counter);
+        }
+        return newAttrName;
+    }
+
     private void addAttributeAt(final int i) {
-        String name = "attr" + i;
-        while (state.context.existsAttributeAlready(name)) name = name + "'";
-        state.context.addAttributeAt(name, i); matrixModel.fireTableStructureChanged();
-        SwingUtilities.invokeLater(new Runnable() { public void run() { matrix.renameColumnHeader(i + 1); } });
+        String name = generateNewAttributeName();
+        state.context.addAttributeAt(name, i);
+        matrixModel.fireTableStructureChanged();
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                matrix.renameColumnHeader(i + 1);
+            }
+        });
     }
 
     private void addObjectAt(final int i) {
-        String name = "obj" + i;
-        while (state.context.existsObjectAlready(name)) name = name + "'";
+        String name = generateNewObjectName();
         FullObject<String, String> newObject = new FullObject<>(name);
-        state.context.addObjectAt(newObject, i); matrixModel.fireTableStructureChanged();
-        SwingUtilities.invokeLater(new Runnable() { public void run() { matrix.renameRowHeader(i + 1); } });
+        state.context.addObjectAt(newObject, i);
+        matrixModel.fireTableStructureChanged();
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                matrix.renameRowHeader(i + 1);
+            }
+        });
+    }
+
+    // ╔════════════════════════════════════════════════════════════════════════╗
+    // ║ (F1) ATTRIBUTS - Add Left/Right AVEC SUPPORT GROUPES                    ║
+    // ╚════════════════════════════════════════════════════════════════════════╝
+
+    /**
+     * (F1) Add Attribute Left - RESPECTE LES FRONTIÈRES DU GROUPE
+     * Si l'attribut est dans un groupe → ajoute AVANT le groupe
+     * Sinon → ajoute simplement à gauche
+     */
+    class AddAttributeLeftInGroupAction extends AbstractAction {
+        public void actionPerformed(ActionEvent e) {
+            if (matrix.isRenaming) return;
+            
+            String currentAttr = getClickedAttributeName();
+            if (currentAttr == null) return;
+            
+            AttributeGroup group = state.context.getGroupForAttribute(currentAttr);
+            
+            int insertIndex;
+            if (group != null) {
+                insertIndex = matrixModel.getGroupLeftInsertionIndex(currentAttr);
+            } else {
+                insertIndex = lastActiveColumnIndex - 1;
+            }
+            
+            if (insertIndex < 0) return;
+            
+            matrix.saveSelection();
+            addAttributeAt(insertIndex);
+            
+            if (!state.context.getAllAttributeGroups().isEmpty()) {
+                state.context.reorganizeAttributesForGroups();
+            }
+            
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate();
+            matrix.repaint();
+            
+            state.saveConf();
+            matrix.restoreSelection();
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
+        }
+    }
+
+    /**
+     * (F1) Add Attribute Right - RESPECTE LES FRONTIÈRES DU GROUPE
+     * Si l'attribut est dans un groupe → ajoute APRÈS le groupe
+     * Sinon → ajoute simplement à droite
+     */
+    class AddAttributeRightInGroupAction extends AbstractAction {
+        public void actionPerformed(ActionEvent e) {
+            if (matrix.isRenaming) return;
+            
+            String currentAttr = getClickedAttributeName();
+            if (currentAttr == null) return;
+            
+            AttributeGroup group = state.context.getGroupForAttribute(currentAttr);
+            
+            int insertIndex;
+            if (group != null) {
+                insertIndex = matrixModel.getGroupRightInsertionIndex(currentAttr);
+            } else {
+                insertIndex = lastActiveColumnIndex;
+            }
+            
+            if (insertIndex < 0) return;
+            
+            matrix.saveSelection();
+            addAttributeAt(insertIndex);
+            
+            if (!state.context.getAllAttributeGroups().isEmpty()) {
+                state.context.reorganizeAttributesForGroups();
+            }
+            
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate();
+            matrix.repaint();
+            
+            state.saveConf();
+            matrix.restoreSelection();
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
+        }
+    }
+
+    /**
+     * (F1) Create New Attribute IN GROUP
+     * Clic droit sur groupe → crée un nouvel attribut À LA FIN du groupe
+     * Auto-génère le nom "attrX"
+     */
+    class CreateNewAttributeInGroupAction extends AbstractAction {
+        public void actionPerformed(ActionEvent e) {
+            if (matrix.isRenaming) return;
+            
+            AttributeGroup group = getClickedGroup();
+            if (group == null) {
+                JOptionPane.showMessageDialog(ContextEditor.this,
+                    "No group found at this position.",
+                    "No Group", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            
+            String newAttrName = generateNewAttributeName();
+            
+            matrix.saveSelection();
+            
+            List<String> groupAttrs = group.getAttributeNames();
+            int insertIndex = -1;
+            
+            if (!groupAttrs.isEmpty()) {
+                String lastAttrInGroup = groupAttrs.get(groupAttrs.size() - 1);
+                for (int i = 0; i < state.context.getAttributeCount(); i++) {
+                    if (state.context.getAttributeAtIndex(i).equals(lastAttrInGroup)) {
+                        insertIndex = i + 1;
+                        break;
+                    }
+                }
+            }
+            
+            if (insertIndex < 0) {
+                insertIndex = state.context.getAttributeCount();
+            }
+            
+            state.context.addAttributeAt(newAttrName, insertIndex);
+            group.addAttributeAtEnd(newAttrName);
+            
+            state.context.reorganizeAttributesForGroups();
+            
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate();
+            matrix.repaint();
+            
+            state.saveConf();
+            matrix.restoreSelection();
+            
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
+            
+            JOptionPane.showMessageDialog(ContextEditor.this,
+                "New attribute '" + newAttrName + "' created in group '" + group.getGroupName() + "'",
+                "Success", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    /**
+     * (F1) Delete Attribute - AVEC GESTION DES GROUPES
+     * Remplace RemoveActiveAttributeAction pour support groupes
+     */
+    class DeleteActiveAttributeAction extends AbstractAction {
+        public void actionPerformed(ActionEvent e) {
+            if (matrix.isRenaming || state.context.getAttributeCount() == 0) return;
+            
+            String attrName = getClickedAttributeName();
+            if (attrName == null) return;
+            
+            AttributeGroup group = state.context.getGroupForAttribute(attrName);
+            
+            int confirm = JOptionPane.showConfirmDialog(ContextEditor.this,
+                "Delete attribute '" + attrName + "' permanently?\n" +
+                "This will remove it from all objects.",
+                "Confirm Delete Attribute",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+            
+            if (confirm != JOptionPane.YES_OPTION) return;
+            
+            matrix.saveSelection();
+            
+            if (group != null) {
+                state.context.getAttributeGroupManager().removeAttributeFromGroup(group.getGroupId(), attrName);
+                
+                if (group.getAttributeCount() == 0) {
+                    state.context.removeAttributeGroup(group.getGroupId());
+                }
+            }
+            
+            state.context.removeAttribute(attrName);
+            matrix.updateColumnWidths(lastActiveColumnIndex);
+            
+            if (lastActiveColumnIndex - 1 >= state.context.getAttributeCount()) {
+                lastActiveColumnIndex--;
+            }
+            
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate();
+            matrix.repaint();
+            
+            state.saveConf();
+            matrix.restoreSelection();
+            
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
+        }
+    }
+
+    // ╔════════════════════════════════════════════════════════════════════════╗
+    // ║ (F1) OBJETS - Add Above/Below AVEC SUPPORT GROUPES                     ║
+    // ╚════════════════════════════════════════════════════════════════════════╝
+
+    /**
+     * (F1) Delete Object - AVEC GESTION DES GROUPES D'OBJETS
+     */
+    class DeleteActiveObjectAction extends AbstractAction {
+        public void actionPerformed(ActionEvent e) {
+            if (matrix.isRenaming || state.context.getObjectCount() == 0) return;
+            
+            String objectName = state.context.getObjectAtIndex(lastActiveRowIndex - 2).getIdentifier();
+            
+            int confirm = JOptionPane.showConfirmDialog(ContextEditor.this,
+                "Delete object '" + objectName + "' permanently?",
+                "Confirm Delete Object",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+            
+            if (confirm != JOptionPane.YES_OPTION) return;
+            
+            matrix.saveSelection();
+            try {
+                state.context.removeObject(objectName);
+                
+                if (lastActiveRowIndex - 1 >= state.context.getObjectCount()) {
+                    lastActiveRowIndex--;
+                }
+            } catch (IllegalObjectException e1) {
+                e1.printStackTrace();
+            }
+            
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate();
+            matrix.repaint();
+            
+            state.saveConf();
+            matrix.restoreSelection();
+            
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
+        }
+    }
+
+    /**
+     * (F1) Add Object Above - RESPECTE LES FRONTIÈRES DU GROUPE
+     */
+    class AddObjectAboveInGroupAction extends AbstractAction {
+        public void actionPerformed(ActionEvent e) {
+            if (matrix.isRenaming) return;
+            
+            if (state.context.getObjectCount() == 0) return;
+            
+            int insertIndex = lastActiveRowIndex - 2;
+            if (insertIndex < 0) insertIndex = 0;
+            
+            matrix.saveSelection();
+            addObjectAt(insertIndex);
+            
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate();
+            matrix.repaint();
+            
+            state.saveConf();
+            matrix.restoreSelection();
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
+        }
+    }
+
+    /**
+     * (F1) Add Object Below - RESPECTE LES FRONTIÈRES DU GROUPE
+     */
+    class AddObjectBelowInGroupAction extends AbstractAction {
+        public void actionPerformed(ActionEvent e) {
+            if (matrix.isRenaming) return;
+            
+            if (state.context.getObjectCount() == 0) return;
+            
+            int insertIndex = lastActiveRowIndex - 1;
+            if (insertIndex > state.context.getObjectCount()) {
+                insertIndex = state.context.getObjectCount();
+            }
+            
+            matrix.saveSelection();
+            addObjectAt(insertIndex);
+            
+            matrixModel.fireTableStructureChanged();
+            matrix.invalidate();
+            matrix.repaint();
+            
+            state.saveConf();
+            matrix.restoreSelection();
+            state.contextChanged();
+            state.getContextEditorUndoManager().makeRedoable();
+        }
     }
 
     @SuppressWarnings("serial")

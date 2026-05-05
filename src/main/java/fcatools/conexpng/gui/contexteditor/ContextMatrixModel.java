@@ -22,6 +22,7 @@ import static fcatools.conexpng.Util.clamp;
  * based on the updated context.
  * 
  * ✅ FIX CASSE : renameAttribute() et renameObject() forcent la casse correcte
+ * ✅ CLEAN : Suppression des méthodes dupliquées
  */
 public class ContextMatrixModel extends AbstractTableModel implements Reorderable {
 
@@ -617,5 +618,230 @@ public class ContextMatrixModel extends AbstractTableModel implements Reorderabl
         }
 
         return visibleIndices;
+    }
+
+    // =========================================================================
+    // (F1) MÉTHODES POUR ADD LEFT/RIGHT AVEC SUPPORT GROUPES
+    // =========================================================================
+
+    /**
+     * Retourne l'index d'insertion AVANT le groupe contenant l'attribut.
+     * Si l'attribut n'est pas dans un groupe, retourne l'index actuel - 1.
+     * 
+     * @param attributeName Nom de l'attribut cliqué
+     * @return Index où insérer le nouvel attribut (AVANT le groupe)
+     */
+    public int getGroupLeftInsertionIndex(String attributeName) {
+        if (attributeName == null) return -1;
+        
+        AttributeGroup group = context.getGroupForAttribute(attributeName);
+        
+        if (group == null) {
+            // Attribut sans groupe : insérer à gauche
+            int currentIndex = getAttributeIndex(attributeName);
+            return currentIndex > 0 ? currentIndex - 1 : 0;
+        }
+        
+        // Attribut dans un groupe : trouver le PREMIER attribut du groupe
+        List<String> groupAttrs = group.getAttributeNames();
+        if (groupAttrs.isEmpty()) return -1;
+        
+        String firstAttrInGroup = groupAttrs.get(0);
+        int firstIndex = getAttributeIndex(firstAttrInGroup);
+        
+        // Insérer AVANT le premier attribut du groupe
+        return firstIndex > 0 ? firstIndex - 1 : 0;
+    }
+
+    /**
+     * Retourne l'index d'insertion APRÈS le groupe contenant l'attribut.
+     * Si l'attribut n'est pas dans un groupe, retourne l'index actuel.
+     * 
+     * @param attributeName Nom de l'attribut cliqué
+     * @return Index où insérer le nouvel attribut (APRÈS le groupe)
+     */
+    public int getGroupRightInsertionIndex(String attributeName) {
+        if (attributeName == null) return -1;
+        
+        AttributeGroup group = context.getGroupForAttribute(attributeName);
+        
+        if (group == null) {
+            // Attribut sans groupe : insérer à droite
+            int currentIndex = getAttributeIndex(attributeName);
+            return currentIndex + 1;
+        }
+        
+        // Attribut dans un groupe : trouver le DERNIER attribut du groupe
+        List<String> groupAttrs = group.getAttributeNames();
+        if (groupAttrs.isEmpty()) return -1;
+        
+        String lastAttrInGroup = groupAttrs.get(groupAttrs.size() - 1);
+        int lastIndex = getAttributeIndex(lastAttrInGroup);
+        
+        // Insérer APRÈS le dernier attribut du groupe
+        return lastIndex + 1;
+    }
+
+    /**
+     * Retourne l'index d'un attribut dans le contexte.
+     * 
+     * @param attributeName Nom de l'attribut
+     * @return Index de l'attribut, ou -1 si non trouvé
+     */
+    private int getAttributeIndex(String attributeName) {
+        if (attributeName == null) return -1;
+        
+        for (int i = 0; i < context.getAttributeCount(); i++) {
+            if (context.getAttributeAtIndex(i).equals(attributeName)) {
+                return i;
+            }
+        }
+        
+        return -1;
+    }
+
+    /**
+     * Retourne les bornes visuelles d'un attribut (en tenant compte des groupes).
+     * 
+     * @param attributeName Nom de l'attribut
+     * @return Tableau [colStart, colEnd] ou null si non trouvé
+     */
+    public int[] getAttributeGroupVisualBounds(String attributeName) {
+        if (attributeName == null) return null;
+        
+        AttributeGroup group = context.getGroupForAttribute(attributeName);
+        if (group == null) {
+            // Attribut sans groupe : bornes = sa propre colonne
+            int index = getAttributeIndex(attributeName);
+            if (index < 0) return null;
+            
+            boolean hasObjGroups = context.hasObjectGroups();
+            int offset = hasObjGroups ? 1 : 0;
+            int visualCol = index + offset + 1;
+            
+            return new int[] { visualCol, visualCol };
+        }
+        
+        // Attribut dans un groupe : bornes = tout le groupe
+        return new int[] {
+            getGroupFirstVisualColumn(group),
+            getGroupLastVisualColumn(group)
+        };
+    }
+
+    /**
+     * Retourne la première colonne visuelle d'un groupe.
+     * 
+     * @param group Le groupe d'attributs
+     * @return Numéro de colonne visuelle (1-based)
+     */
+    public int getGroupFirstVisualColumn(AttributeGroup group) {
+        if (group == null) return -1;
+        
+        List<String> attrs = group.getAttributeNames();
+        if (attrs.isEmpty()) return -1;
+        
+        String firstAttr = attrs.get(0);
+        int index = getAttributeIndex(firstAttr);
+        if (index < 0) return -1;
+        
+        boolean hasObjGroups = context.hasObjectGroups();
+        int offset = hasObjGroups ? 1 : 0;
+        
+        return index + offset + 1;
+    }
+
+    /**
+     * Retourne la dernière colonne visuelle d'un groupe.
+     * 
+     * @param group Le groupe d'attributs
+     * @return Numéro de colonne visuelle (1-based)
+     */
+    public int getGroupLastVisualColumn(AttributeGroup group) {
+        if (group == null) return -1;
+        
+        List<String> attrs = group.getAttributeNames();
+        if (attrs.isEmpty()) return -1;
+        
+        String lastAttr = attrs.get(attrs.size() - 1);
+        int index = getAttributeIndex(lastAttr);
+        if (index < 0) return -1;
+        
+        boolean hasObjGroups = context.hasObjectGroups();
+        int offset = hasObjGroups ? 1 : 0;
+        
+        return index + offset + 1;
+    }
+
+    /**
+     * Vérifie si un attribut appartient à un groupe.
+     * 
+     * @param attributeName Nom de l'attribut
+     * @return true si l'attribut est dans un groupe, false sinon
+     */
+    public boolean isAttributeInGroup(String attributeName) {
+        if (attributeName == null) return false;
+        return context.getGroupForAttribute(attributeName) != null;
+    }
+
+    /**
+     * Retourne le groupe contenant un attribut.
+     * 
+     * @param attributeName Nom de l'attribut
+     * @return Le groupe ou null si l'attribut n'est pas groupé
+     */
+    public AttributeGroup getAttributeGroup(String attributeName) {
+        if (attributeName == null) return null;
+        return context.getGroupForAttribute(attributeName);
+    }
+
+    // =========================================================================
+    // (F1) STUBS POUR OBJECT GROUPS (si ObjectGroupManager existe)
+    // =========================================================================
+
+    /**
+     * Retourne l'index d'insertion AU-DESSUS du groupe contenant l'objet.
+     * (À implémenter si ObjectGroupManager existe)
+     * 
+     * @param objectName Nom de l'objet cliqué
+     * @return Index où insérer le nouvel objet (AU-DESSUS du groupe)
+     */
+    public int getGroupAboveInsertionIndex(String objectName) {
+        // TODO: À implémenter quand ObjectGroupManager sera créé
+        // Pour l'instant, retourne l'index standard
+        int currentRow = getObjectRowIndex(objectName);
+        return currentRow > 0 ? currentRow - 1 : 0;
+    }
+
+    /**
+     * Retourne l'index d'insertion EN-DESSOUS du groupe contenant l'objet.
+     * (À implémenter si ObjectGroupManager existe)
+     * 
+     * @param objectName Nom de l'objet cliqué
+     * @return Index où insérer le nouvel objet (EN-DESSOUS du groupe)
+     */
+    public int getGroupBelowInsertionIndex(String objectName) {
+        // TODO: À implémenter quand ObjectGroupManager sera créé
+        // Pour l'instant, retourne l'index standard
+        int currentRow = getObjectRowIndex(objectName);
+        return currentRow + 1;
+    }
+
+    /**
+     * Retourne l'index de ligne d'un objet.
+     * 
+     * @param objectName Nom de l'objet
+     * @return Index de l'objet, ou -1 si non trouvé
+     */
+    private int getObjectRowIndex(String objectName) {
+        if (objectName == null) return -1;
+        
+        for (int i = 0; i < context.getObjectCount(); i++) {
+            if (context.getObjectAtIndex(i).getIdentifier().equals(objectName)) {
+                return i;
+            }
+        }
+        
+        return -1;
     }
 }
