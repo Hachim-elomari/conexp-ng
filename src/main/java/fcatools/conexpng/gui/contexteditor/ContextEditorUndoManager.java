@@ -6,104 +6,86 @@ import javax.swing.undo.UndoableEdit;
 
 import fcatools.conexpng.Conf;
 import fcatools.conexpng.gui.MainToolbar;
-import fcatools.conexpng.model.AttributeGroupManager;
 
 /**
- * Undo manager for context editor with proper attribute group support.
- * 
- * FIX UNDO/REDO : Cette classe capture maintenant l'état complet des groupes
- * d'attributs lors des opérations undo/redo, pas uniquement le contexte.
- * 
- * @author Torsten Casselt
- * @modified for attribute groups - April 2026
+ * Undo manager refactorisé pour gérer correctement :
+ * - les groupes d'attributs (via Conf.copy() qui clone le AttributeGroupManager)
+ * - les cas où conf.lastConf == null (pas de NPE)
+ * - les undo/redo répétés (snapshot frais à chaque application)
  */
 public class ContextEditorUndoManager extends UndoManager {
+
     private static final long serialVersionUID = 8164716784804291609L;
-    private Conf conf;
+
+    private final Conf conf;
     private boolean undoRedoInProgress;
 
-    /**
-     * Creates the undo manager with given configuration.
-     * 
-     * @param conf the global configuration object
-     */
     public ContextEditorUndoManager(Conf conf) {
         this.conf = conf;
         this.undoRedoInProgress = false;
     }
 
-    /**
-     * Method to define the steps necessary for undo and redo and register the UndoableEdit.
-     * 
-     * FIX UNDO/REDO : Maintenant capture aussi l'état des groupes d'attributs.
-     * 
-     * Le problème original était que les groupes n'étaient pas sauvegardés,
-     * donc lors d'un undo/redo, les groupes disparaissaient.
-     * 
-     * Solution : Capturer explicitement l'AttributeGroupManager AVANT et APRÈS l'action.
-     */
-    public void makeRedoable() {
-        final Conf curConf = conf.copy(conf);
-        final Conf lastConf = conf.copy(conf.lastConf);
-        
-        // 🆕 NOUVEAU : Capturer aussi conf.lastConf
-        final Conf savedLastConf = conf.copy(conf.lastConf);
-        
-        // FIX UNDO/REDO : Capturer les groupes
-        final AttributeGroupManager curGroupManager = 
-            conf.context.getAttributeGroupManager().clone();
-        final AttributeGroupManager lastGroupManager = 
-            conf.lastConf.context.getAttributeGroupManager().clone();
-
-        if (!undoRedoInProgress) {
-            UndoableEdit undoableEdit = new AbstractUndoableEdit() {
-                private static final long serialVersionUID = -4461145596327911434L;
-
-                public void redo() throws javax.swing.undo.CannotRedoException {
-                    super.redo();
-                    undoRedoInProgress = true;
-                    
-                    // Restaurer le contexte
-                    conf.newContext(curConf.context);
-                    conf.context.setAttributeGroupManager(curGroupManager.clone());
-                    
-                    // 🆕 Restaurer aussi conf.lastConf
-                    conf.lastConf = savedLastConf.copy(savedLastConf);
-                    
-                    undoRedoInProgress = false;
-                    MainToolbar.getRedoButton().setEnabled(canRedo());
-                    MainToolbar.getUndoButton().setEnabled(canUndo());
-                }
-
-                public void undo() throws javax.swing.undo.CannotUndoException {
-                    super.undo();
-                    undoRedoInProgress = true;
-                    
-                    // Restaurer le contexte
-                    conf.newContext(lastConf.context);
-                    conf.context.setAttributeGroupManager(lastGroupManager.clone());
-                    
-                    // 🆕 Restaurer aussi conf.lastConf 
-                    // (garder l'ancienne valeur de lastConf)
-                    // Le lastConf d'AVANT cette action reste lastConf
-                    
-                    undoRedoInProgress = false;
-                    MainToolbar.getRedoButton().setEnabled(canRedo());
-                    MainToolbar.getUndoButton().setEnabled(canUndo());
-                }
-            };
-
-            addEdit(undoableEdit);
-            MainToolbar.getRedoButton().setEnabled(canRedo());
-            MainToolbar.getUndoButton().setEnabled(canUndo());
-        }
+    public boolean isUndoRedoInProgress() {
+        return undoRedoInProgress;
     }
 
     /**
-     * Helper : Vérifier si on est actuellement en train de faire undo/redo
-     * (évite les boucles infinies d'édits)
+     * À appeler APRÈS une mutation, à condition que state.saveConf() ait été
+     * appelé AVANT la mutation pour capturer l'état précédent.
      */
-    public boolean isUndoRedoInProgress() {
-        return undoRedoInProgress;
+    public void makeRedoable() {
+        if (undoRedoInProgress) return;
+
+        // Pas d'état précédent → rien à enregistrer (premier appel ou état non sauvegardé)
+        if (conf.lastConf == null || conf.lastConf.context == null) {
+            return;
+        }
+
+        // Snapshots immuables (deep copy via Conf.copy qui clone aussi les groupes)
+        final Conf snapshotAfter  = conf.copy(conf);
+        final Conf snapshotBefore = conf.copy(conf.lastConf);
+
+        UndoableEdit edit = new AbstractUndoableEdit() {
+            private static final long serialVersionUID = -4461145596327911434L;
+
+            @Override
+            public void redo() throws javax.swing.undo.CannotRedoException {
+                super.redo();
+                applySnapshot(snapshotAfter);
+            }
+
+            @Override
+            public void undo() throws javax.swing.undo.CannotUndoException {
+                super.undo();
+                applySnapshot(snapshotBefore);
+            }
+        };
+
+        addEdit(edit);
+        updateButtons();
+    }
+
+    /**
+     * Restaure une snapshot. Toujours via une nouvelle deep copy pour ne pas
+     * "consommer" la snapshot (sinon les undo/redo répétés ne marchent pas).
+     */
+    private void applySnapshot(Conf snapshot) {
+        undoRedoInProgress = true;
+        try {
+            Conf fresh = conf.copy(snapshot);
+            conf.newContext(fresh.context);
+        } finally {
+            undoRedoInProgress = false;
+            updateButtons();
+        }
+    }
+
+    private void updateButtons() {
+        try {
+            MainToolbar.getRedoButton().setEnabled(canRedo());
+            MainToolbar.getUndoButton().setEnabled(canUndo());
+        } catch (Exception ignore) {
+            // Boutons pas encore initialisés → safe à ignorer
+        }
     }
 }

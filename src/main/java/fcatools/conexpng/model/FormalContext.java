@@ -476,7 +476,6 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
         System.out.println("\n[TRANSPOSE] ========== DÉBUT DU TRANSPOSE ==========");
         
         // ÉTAPE 1 : Déterminer l'état AVANT transpose
-        // ─────────────────────────────────────────────
         boolean hasAttributeGroups = attributeGroupManager.getGroupCount() > 0;
         boolean hasObjectGroups = !objectToGroupMap.isEmpty();
         
@@ -484,26 +483,22 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
         System.out.println("  - Groupes d'attributs : " + attributeGroupManager.getGroupCount());
         System.out.println("  - Groupes d'objets : " + objectToGroupMap.size());
         
-        // ÉTAPE 2 : Sauvegarder les groupes d'attributs ACTUELS
-        // ──────────────────────────────────────────────────────
+        // ÉTAPE 2 : Sauvegarder les groupes AVANT transpose
         Map<String, Set<String>> savedAttributeGroups = new HashMap<>();
         if (hasAttributeGroups) {
             for (AttributeGroup group : getAllAttributeGroups()) {
                 Set<String> attrs = new HashSet<>(group.getAttributeNames());
                 savedAttributeGroups.put(group.getGroupName(), attrs);
-                System.out.println("[TRANSPOSE] Groupe d'attribut sauvegardé: " + group.getGroupName() + " = " + attrs);
+                System.out.println("[TRANSPOSE] Groupe attr sauvegardé: " + group.getGroupName() + " = " + attrs);
             }
         }
         
-        // ÉTAPE 3 : Sauvegarder les groupes d'objets ACTUELS
-        // ────────────────────────────────────────────────────
         Map<String, String> savedObjectGroups = new HashMap<>(objectToGroupMap);
         if (hasObjectGroups) {
-            System.out.println("[TRANSPOSE] Groupes d'objets sauvegardés: " + savedObjectGroups);
+            System.out.println("[TRANSPOSE] Groupes obj sauvegardés: " + savedObjectGroups);
         }
         
-        // ÉTAPE 4 : Faire le transpose NORMAL (inversion lignes/colonnes)
-        // ──────────────────────────────────────────────────────────────
+        // ÉTAPE 3 : Faire le transpose NORMAL (inversion lignes/colonnes)
         System.out.println("[TRANSPOSE] Exécution du transpose (inversion lignes/colonnes)");
         IndexedSet<FullObject<String, String>> newObjects = new ListSet<>();
         IndexedSet<String> newAttributes = new ListSet<>();
@@ -543,72 +538,67 @@ public class FormalContext extends de.tudresden.inf.tcs.fcalib.FormalContext<Str
         System.out.println("  - Nouveaux objets : " + getObjectCount());
         System.out.println("  - Nouveaux attributs : " + getAttributeCount());
         
-        // ÉTAPE 5 : Mapper les anciens groupes aux nouvelles positions
-        // ────────────────────────────────────────────────────────────
-        
-        // Nettoyer les groupes actuels
+        // ÉTAPE 4 : NETTOYER les anciens groupes
         attributeGroupManager.clear();
         objectToGroupMap.clear();
         
-        // CAS A : On avait des groupes d'ATTRIBUTS avant → ils deviennent des groupes d'OBJETS
+        // ÉTAPE 5 : RECRÉER les groupes dans le sens inverse
+        
+        // CAS A : Groupes d'ATTRIBUTS → Groupes d'OBJETS
         if (hasAttributeGroups) {
-            System.out.println("[TRANSPOSE] Conversion: groupes d'attributs → groupes d'objets");
+            System.out.println("[TRANSPOSE] Conversion: groupes attributs → groupes objets");
             for (Map.Entry<String, Set<String>> entry : savedAttributeGroups.entrySet()) {
                 String groupName = entry.getKey();
                 Set<String> oldAttributes = entry.getValue();
                 
-                // Ces anciens attributs sont maintenant des objets
+                // Les anciens attributs sont maintenant des OBJETS
                 for (String oldAttr : oldAttributes) {
-                    try {
-                        if (getObject(oldAttr) != null) {
-                            objectToGroupMap.put(oldAttr, groupName);
-                            System.out.println("[TRANSPOSE]   → Objet '" + oldAttr + "' assigné au groupe '" + groupName + "'");
-                        }
-                    } catch (Exception ex) {
-                        // Objet n'existe pas après transpose
+                    if (getObject(oldAttr) != null) {
+                        objectToGroupMap.put(oldAttr, groupName);
+                        System.out.println("[TRANSPOSE]   → Objet '" + oldAttr + "' dans groupe '" + groupName + "'");
                     }
                 }
             }
         }
         
-        // CAS B : On avait des groupes d'OBJETS avant → ils deviennent des groupes d'ATTRIBUTS
+        // CAS B : Groupes d'OBJETS → Groupes d'ATTRIBUTS
         if (hasObjectGroups) {
-            System.out.println("[TRANSPOSE] Conversion: groupes d'objets → groupes d'attributs");
+            System.out.println("[TRANSPOSE] Conversion: groupes objets → groupes attributs");
             
-            // Inverser savedObjectGroups : Map<String, String> → Map<String, Set<String>>
-            // oldObject → groupName  →  groupName → {newAttributeNames}
-            Map<String, Set<String>> invertedGroups = new HashMap<>();
+            // Inverser : Map<objet, groupName> → Map<groupName, Set<attributs>>
+            Map<String, Set<String>> groupToNewAttrs = new HashMap<>();
             
             for (Map.Entry<String, String> entry : savedObjectGroups.entrySet()) {
-                String oldObject = entry.getKey();      // ex: "female"
-                String groupName = entry.getValue();    // ex: "gender"
+                String oldObject = entry.getKey();
+                String groupName = entry.getValue();
                 
-                // L'ancien objet est maintenant un attribut
-                if (getAttributeAtIndex(-1) == null) { // Vérification basique
-                    try {
-                        // Chercher si oldObject existe maintenant comme attribut
-                        if (getAttributes().contains(oldObject)) {
-                        	if (!invertedGroups .containsKey(groupName)) { invertedGroups.put(groupName, new HashSet()); } invertedGroups.get(groupName) .add(oldObject);
-                        }
-                    } catch (Exception ex) {
-                        // Attribut n'existe pas
+                // L'ancien objet est maintenant un ATTRIBUT
+                if (getAttributes().contains(oldObject)) {
+                    if (!groupToNewAttrs.containsKey(groupName)) {
+                        groupToNewAttrs.put(groupName, new HashSet<String>());
                     }
+                    groupToNewAttrs.get(groupName).add(oldObject);
                 }
             }
             
-            // Créer les groupes d'attributs avec les attributs transformés
-            for (Map.Entry<String, Set<String>> entry : invertedGroups.entrySet()) {
+            // Créer les groupes d'attributs
+            for (Map.Entry<String, Set<String>> entry : groupToNewAttrs.entrySet()) {
                 String groupName = entry.getKey();
-                Set<String> newAttributes_InGroup = entry.getValue();
+                Set<String> newAttrs = entry.getValue();
                 
-                System.out.println("[TRANSPOSE]   → Création groupe d'attributs '" + groupName + "' = " + newAttributes_InGroup);
+                System.out.println("[TRANSPOSE]   → Groupe '" + groupName + "' = " + newAttrs);
                 String groupId = attributeGroupManager.createGroup(groupName);
                 if (groupId != null) {
-                    for (String attr : newAttributes_InGroup) {
+                    for (String attr : newAttrs) {
                         attributeGroupManager.addAttributeToGroup(groupId, attr);
                     }
                 }
             }
+        }
+        
+        // ÉTAPE 6 : Réorganiser les attributs pour regrouper
+        if (attributeGroupManager.getGroupCount() > 0) {
+            reorganizeAttributesForGroups();
         }
         
         System.out.println("[TRANSPOSE] ========== FIN DU TRANSPOSE ==========");

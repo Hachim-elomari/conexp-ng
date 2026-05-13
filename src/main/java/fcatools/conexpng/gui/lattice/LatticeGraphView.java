@@ -139,7 +139,7 @@ public class LatticeGraphView extends JSVGCanvas {
             g.setColor(Color.BLACK);
             g.drawOval(x, y, radius * 2, radius * 2);
 
-            // label drawing
+         // label drawing
             if ((!n.getVisibleObjects().isEmpty()) && state.guiConf.showObjectLabel) {
                 g.setColor(Color.BLACK);
 
@@ -149,11 +149,8 @@ public class LatticeGraphView extends JSVGCanvas {
                         .getY(), x + radius, y + radius);
                 g.setStroke(new BasicStroke());
 
-                // draw the label
-                
-                // (F1) OPTION A : Formatter avec groupes (GENDER:female)
-                String content = LatticeNodeLabelFormatter.formatAttributesWithGroups(
-                    n.getAttributes(), state.context);
+                // ✅ FIX : Utiliser n.getVisibleObjects() pour afficher les NOMS D'OBJETS
+                String content = n.getObjectsLabel().elementsToString();
                 
                 g.setFont(font);
                 FontMetrics fm = g.getFontMetrics();
@@ -168,10 +165,8 @@ public class LatticeGraphView extends JSVGCanvas {
 
                 g.drawRect(n.getObjectsLabel().getX(), n.getObjectsLabel().getY(), r.width, r.height);
 
-                n.getObjectsLabel()
-.setBounds(n.getObjectsLabel().getX(), n.getObjectsLabel().getY() - r.y,
+                n.getObjectsLabel().setBounds(n.getObjectsLabel().getX(), n.getObjectsLabel().getY() - r.y,
                         r.width, r.height);
-
             }
 
             // analog like objects
@@ -183,7 +178,9 @@ public class LatticeGraphView extends JSVGCanvas {
                         + radius, y + radius);
                 g.setStroke(new BasicStroke());
 
-                String content = n.getAttributesLabel().elementsToString();
+                // ✅ FIX : Utiliser formatAttributesSimple() pour afficher les NOMS D'ATTRIBUTS (sans préfixes)
+                String content = LatticeNodeLabelFormatter.formatAttributesSimple(n.getVisibleAttributes());
+                
                 g.setFont(font);
                 FontMetrics fm = g.getFontMetrics();
                 Rectangle r = fm.getStringBounds(content, g).getBounds();
@@ -201,9 +198,6 @@ public class LatticeGraphView extends JSVGCanvas {
                 n.getAttributesLabel().setBounds(n.getAttributesLabel().getX(), n.getAttributesLabel().getY() - r.y,
                         r.width,
                         r.height);
-
-                // draw filled node
-
             }
             if (!n.getVisibleAttributes().isEmpty() && !n.getVisibleObjects().isEmpty()) {
                 g.setColor(Color.BLACK);

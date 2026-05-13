@@ -149,15 +149,18 @@ public class Conf {
     public Conf copy(Conf conf) {
         Conf copy = new Conf();
         copy.context = new FormalContext();
+        
+        // Copier attributs
         copy.context.addAttributes(conf.context.getAttributes());
+        
+        // Copier objets
         try {
             copy.context.addObjects(conf.context.getObjects());
         } catch (IllegalObjectException e) {
-            // should never happens
+            e.printStackTrace();
         }
         
-        // ✅ FIX UNDO/REDO : Copier aussi la matrice d'incidence (les X) !
-        // Sans cela, les toggles de cases ne sont pas sauvegardés
+        // ✅ FIX UNDO/REDO : Copier la matrice d'incidence (les X)
         for (int i = 0; i < conf.context.getObjectCount(); i++) {
             for (int j = 0; j < conf.context.getAttributeCount(); j++) {
                 String objId = conf.context.getObjectAtIndex(i).getIdentifier();
@@ -165,21 +168,32 @@ public class Conf {
                 if (conf.context.objectHasAttribute(conf.context.getObject(objId), attr)) {
                     try {
                         copy.context.addAttributeToObject(attr, objId);
-                    } catch (IllegalAttributeException e1) {
-                        e1.printStackTrace();
-                    } catch (IllegalObjectException e1) {
+                    } catch (IllegalAttributeException | IllegalObjectException e1) {
                         e1.printStackTrace();
                     }
                 }
             }
         }
         
-        // ✅ FIX UNDO/REDO : Copier aussi les groupes d'attributs
+        // ✅ FIX UNDO/REDO : Copier les groupes d'attributs
         if (conf.context.hasAttributeGroupManager()) {
             copy.context.setAttributeGroupManager(
                 conf.context.getAttributeGroupManager().clone()
             );
         }
+        
+        // ✅ FIX UNDO/REDO : Copier les groupes d'objets (si existants)
+        //if (conf.context.hasObjectGroups()) {
+          //  copy.context.setObjectGroupManager(
+            //    conf.context.getObjectGroupManager().clone()
+            //);
+        //}
+        
+        // ✅ FIX UNDO/REDO : Copier le GUI state
+        copy.guiConf = new GUIConf();
+        copy.guiConf.compactMatrix = conf.guiConf.compactMatrix;
+        copy.guiConf.showArrowRelations = conf.guiConf.showArrowRelations;
+        copy.guiConf.columnWidths = new java.util.HashMap<>(conf.guiConf.columnWidths);
         
         return copy;
     }

@@ -20,7 +20,6 @@ import static javax.swing.KeyStroke.getKeyStroke;
 
 import fcatools.conexpng.Conf;
 import fcatools.conexpng.model.AttributeGroup;
-import java.util.List;
 
 public class ContextMatrix extends JTable {
 
@@ -35,31 +34,36 @@ public class ContextMatrix extends JTable {
     private static final Color ODD_ROW_COLOR         = new Color(255, 255, 255);
     private static final Color TABLE_GRID_COLOR      = new Color(120, 120, 120);
 
-    // (F1) Couleurs pour la fusion des groupes
     private static final Color GROUP_BG     = new Color(180, 210, 255);
     private static final Color GROUP_FG     = new Color(0, 51, 102);
     private static final Color GROUP_BORDER = new Color(100, 150, 200);
 
-    // ✅ FIX : Déclarer state comme champ de classe
     private Conf state;
+    private ContextMatrixModel matrixModel;
+    private GroupDragHandler groupDragHandler;
 
-    // ✅ FIX : Ajouter Conf state comme 3ème paramètre
     public ContextMatrix(TableModel dm, Map<Integer, Integer> columnWidths, Conf state) {
         super(dm);
         this.columnWidths = columnWidths;
-        this.state = state;  // ✅ Maintenant state existe comme paramètre
+        this.state = state;
+        this.matrixModel = (ContextMatrixModel) dm;
+
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         setTableHeader(null);
         setOpaque(false);
         setGridColor(TABLE_GRID_COLOR);
-        setIntercellSpacing(new Dimension(0, 0));
+        setIntercellSpacing(new Dimension(1, 1));  // ✅ FIX : 1px entre cellules
         setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         setCellSelectionEnabled(true);
-        setShowGrid(false);
+        setShowGrid(true);  // ✅ FIX : Activer la grille
         clearKeyBindings();
         createResizingInteractions();
         createDraggingInteractions();
         setupCustomRenderer();
+
+        this.groupDragHandler = new GroupDragHandler(this, matrixModel, state);
+        this.addMouseListener(groupDragHandler);
+        this.addMouseMotionListener(groupDragHandler);
     }
 
     private void setupCustomRenderer() {
@@ -68,31 +72,38 @@ public class ContextMatrix extends JTable {
             public Component getTableCellRendererComponent(JTable table, Object value,
                     boolean isSelected, boolean hasFocus, int row, int column) {
                 super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                
                 setHorizontalAlignment(JLabel.CENTER);
+                // ✅ FIX : PAS de setBorder() - laisse la grille native de JTable
                 
                 boolean hasObjGroups = state.context.hasObjectGroups();
+                int objColIndex = hasObjGroups ? 1 : 0;
                 
-                // ✅ NOUVEAU : Colonne 0 = groupes d'objets (si elle existe)
+                // Colonne 0 : Groupes d'objets
                 if (column == 0 && hasObjGroups && row >= 2) {
                     setBackground(GROUP_HEADER_COLOR);
                     setFont(getFont().deriveFont(Font.BOLD, 10f));
                     setForeground(Color.BLACK);
-                    setText(""); // paint() s'en charge
                 }
-                // Ligne 0 : noms de groupes d'attributs
+                // Ligne 0 : Header groupes attributs
                 else if (row == 0) {
                     setBackground(GROUP_HEADER_COLOR);
                     setFont(getFont().deriveFont(Font.BOLD));
                     setForeground(Color.BLACK);
-                    setText(""); // paint() s'en charge
                 }
-                // Ligne 1 : noms d'attributs
+                // Ligne 1 : Header noms attributs
                 else if (row == 1) {
                     setBackground(HEADER_COLOR_START);
                     setFont(getFont().deriveFont(Font.PLAIN));
                     setForeground(Color.BLACK);
                 }
-                // Données
+                // ✅ FIX : Colonne noms objets (même couleur que header attributs)
+                else if (column == objColIndex && row >= 2) {
+                    setBackground(HEADER_COLOR_START);
+                    setFont(getFont().deriveFont(Font.PLAIN));
+                    setForeground(Color.BLACK);
+                }
+                // Cellules de données
                 else {
                     if (isSelected) {
                         setBackground(table.getSelectionBackground());
@@ -109,70 +120,81 @@ public class ContextMatrix extends JTable {
         setDefaultRenderer(Object.class, customRenderer);
     }
 
-    // =========================================================================
-    // (F1) VRAIE FUSION : paint() dessine les cellules fusionnées par-dessus
-    // =========================================================================
-
     @Override
     public void paint(Graphics g) {
-        super.paint(g); // JTable dessine normalement d'abord
-     
+        super.paint(g);
+
         if (getModel() instanceof ContextMatrixModel) {
             ContextMatrixModel model = (ContextMatrixModel) getModel();
             if (model.isDisplayWithGroups()) {
-                // Fusion HORIZONTALE des groupes d'attributs (ligne 0)
                 paintMergedGroupCells((Graphics2D) g, model);
             }
-            
-            // ✅ NOUVEAU : Fusion VERTICALE des groupes d'objets (colonne 0)
             if (state.context.hasObjectGroups()) {
                 paintMergedObjectGroupCells((Graphics2D) g, model);
+            }
+        }
+
+        if (groupDragHandler != null && groupDragHandler.isDragging()) {
+            AttributeGroup draggedGroup = groupDragHandler.getDraggedGroup();
+            if (draggedGroup != null && !draggedGroup.getAttributeNames().isEmpty()) {
+                Graphics2D g2d = (Graphics2D) g.create();
+                g2d.setColor(new Color(100, 150, 255, 60));
+
+                ContextMatrixModel model = (ContextMatrixModel) getModel();
+                int[] bounds = model.getAttributeGroupVisualBounds(
+                    draggedGroup.getAttributeNames().get(0)
+                );
+
+                if (bounds != null) {
+                    Rectangle startRect = getCellRect(0, bounds[0], true);
+                    Rectangle endRect   = getCellRect(1, bounds[1], true);
+
+                    int x = startRect.x;
+                    int y = startRect.y;
+                    int width  = endRect.x + endRect.width - startRect.x;
+                    int height = getRowHeight(0) + getRowHeight(1);
+
+                    g2d.fillRect(x, y, width, height);
+                    g2d.setColor(new Color(100, 150, 255, 180));
+                    g2d.drawRect(x, y, width - 1, height - 1);
+                }
+                g2d.dispose();
             }
         }
     }
 
     private void paintMergedGroupCells(Graphics2D g2d, ContextMatrixModel model) {
         int colCount = getColumnCount();
-        int col = 1; // Ignorer colonne 0 (noms des objets)
+        boolean hasObjGroups = state.context.hasObjectGroups();
+        int startCol = hasObjGroups ? 2 : 1;
+        int col = startCol;
 
         while (col < colCount) {
             Object val = model.getValueAt(0, col);
             String groupName = (val != null) ? val.toString().trim() : "";
+            if (groupName.isEmpty()) { col++; continue; }
 
-            if (groupName.isEmpty()) {
-                col++;
-                continue;
-            }
-
-            // Trouver la dernière colonne de ce groupe
             int lastCol = col;
             for (int next = col + 1; next < colCount; next++) {
                 Object nextVal = model.getValueAt(0, next);
                 String nextGroup = (nextVal != null) ? nextVal.toString().trim() : "";
-                if (nextGroup.equals(groupName)) {
-                    lastCol = next;
-                } else {
-                    break;
-                }
+                if (nextGroup.equals(groupName)) lastCol = next;
+                else break;
             }
 
-            // Rectangle fusionné
             Rectangle r1 = getCellRect(0, col, true);
             Rectangle r2 = getCellRect(0, lastCol, true);
+
             int x      = r1.x;
             int y      = r1.y;
             int width  = r2.x + r2.width - r1.x;
             int height = r1.height;
 
-            // Fond
             g2d.setColor(GROUP_BG);
             g2d.fillRect(x, y, width, height);
-
-            // Bordure
             g2d.setColor(GROUP_BORDER);
             g2d.drawRect(x, y, width - 1, height - 1);
 
-            // Texte centré
             g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                                  RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             g2d.setFont(new Font("Arial", Font.BOLD, 12));
@@ -185,70 +207,257 @@ public class ContextMatrix extends JTable {
             col = lastCol + 1;
         }
     }
-    
-    /**
-     * Dessine les cellules fusionnées pour les groupes d'objets (colonne 0, vertical)
-     */
+
     private void paintMergedObjectGroupCells(Graphics2D g2d, ContextMatrixModel model) {
         int rowCount = getRowCount();
-        int row = 2; // Commencer après ligne groupes et ligne attributs
-     
+        int row = 2;
+
         while (row < rowCount) {
             Object val = model.getValueAt(row, 0);
             String groupName = (val != null) ? val.toString().trim() : "";
-     
+            
+            // ✅ FIX : Si pas de groupe, dessiner une bordure différente
             if (groupName.isEmpty()) {
+                Rectangle r = getCellRect(row, 0, true);
+                g2d.setColor(Color.LIGHT_GRAY);
+                g2d.drawRect(r.x, r.y, r.width - 1, r.height - 1);
                 row++;
                 continue;
             }
-     
-            // Trouver la dernière ligne de ce groupe
+
             int lastRow = row;
             for (int next = row + 1; next < rowCount; next++) {
                 Object nextVal = model.getValueAt(next, 0);
                 String nextGroup = (nextVal != null) ? nextVal.toString().trim() : "";
-                if (nextGroup.equals(groupName)) {
-                    lastRow = next;
-                } else {
-                    break;
-                }
+                if (nextGroup.equals(groupName)) lastRow = next;
+                else break;
             }
-     
-            // Rectangle fusionné (vertical)
+
             Rectangle r1 = getCellRect(row, 0, true);
             Rectangle r2 = getCellRect(lastRow, 0, true);
+
             int x      = r1.x;
             int y      = r1.y;
             int width  = r1.width;
             int height = r2.y + r2.height - r1.y;
-     
-            // Fond
+
             g2d.setColor(GROUP_BG);
             g2d.fillRect(x, y, width, height);
-     
-            // Bordure
             g2d.setColor(GROUP_BORDER);
             g2d.drawRect(x, y, width - 1, height - 1);
-     
-            // Texte centré verticalement
+
             g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                                  RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             g2d.setFont(new Font("Arial", Font.BOLD, 11));
             g2d.setColor(GROUP_FG);
             FontMetrics fm = g2d.getFontMetrics();
-            
-            // Centrer le texte
             int textX = x + (width - fm.stringWidth(groupName)) / 2;
             int textY = y + (height + fm.getAscent() - fm.getDescent()) / 2;
             g2d.drawString(groupName, textX, textY);
-     
+
             row = lastRow + 1;
         }
     }
 
-    // =========================================================================
-    // Reste du code original inchangé
-    // =========================================================================
+
+
+    private static class GroupDragHandler extends MouseAdapter {
+        
+        private final ContextMatrix matrix;
+        private final ContextMatrixModel model;
+        private final Conf state;
+        
+        private boolean isDragging = false;
+        private int dragStartColumn = -1;
+        private int dragCurrentColumn = -1;
+        private AttributeGroup draggedGroup = null;
+        private int originalGroupPosition = -1;
+        
+        private static final int DRAG_THRESHOLD = 5;
+        private Point dragStartPoint = null;
+        
+        public GroupDragHandler(ContextMatrix matrix, ContextMatrixModel model, Conf state) {
+            this.matrix = matrix;
+            this.model = model;
+            this.state = state;
+        }
+        
+        @Override
+        public void mousePressed(MouseEvent e) {
+            if (e.getButton() != MouseEvent.BUTTON1) {
+                return;
+            }
+            
+            Point p = e.getPoint();
+            int row = matrix.rowAtPoint(p);
+            int col = matrix.columnAtPoint(p);
+            
+            if (row != 0) {
+                return;
+            }
+            
+            boolean hasObjGroups = state.context.hasObjectGroups();
+            int objColOffset = hasObjGroups ? 1 : 0;
+            
+            if (col <= objColOffset) {
+                return;
+            }
+            
+            AttributeGroup group = getGroupAtColumn(col);
+            if (group == null) {
+                return;
+            }
+            
+            dragStartPoint = p;
+            dragStartColumn = col;
+            dragCurrentColumn = col;
+            draggedGroup = group;
+            originalGroupPosition = state.context.getAttributeGroupManager().getGroupPosition(group.getGroupId());
+            
+            System.out.println("[DRAG] Prepared to drag group: " + group.getGroupName() + 
+                              " at column " + col + ", position " + originalGroupPosition);
+        }
+        
+        @Override
+        public void mouseDragged(MouseEvent e) {
+            if (dragStartPoint == null || draggedGroup == null) {
+                return;
+            }
+            
+            Point currentPoint = e.getPoint();
+            
+            if (!isDragging) {
+                int deltaX = Math.abs(currentPoint.x - dragStartPoint.x);
+                if (deltaX < DRAG_THRESHOLD) {
+                    return;
+                }
+                
+                isDragging = true;
+                matrix.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                state.saveConf();
+                System.out.println("[DRAG] Started dragging group: " + draggedGroup.getGroupName());
+            }
+            
+            int newCol = matrix.columnAtPoint(currentPoint);
+            if (newCol >= 0 && newCol != dragCurrentColumn) {
+                dragCurrentColumn = newCol;
+                
+                int newPosition = calculateNewGroupPosition(dragCurrentColumn);
+                
+                if (newPosition >= 0 && newPosition != originalGroupPosition) {
+                    System.out.println("[DRAG] Moving to position: " + newPosition);
+                    
+                    state.context.getAttributeGroupManager().reorderGroup(
+                        draggedGroup.getGroupId(), newPosition
+                    );
+                    originalGroupPosition = newPosition;
+                    
+                    state.context.reorganizeAttributesForGroups();
+                    model.fireTableStructureChanged();
+                    matrix.invalidate();
+                    matrix.repaint();
+                }
+            }
+            
+            matrix.repaint();
+        }
+        
+        @Override
+        public void mouseReleased(MouseEvent e) {
+            if (isDragging) {
+                System.out.println("[DRAG] Finished dragging group: " + draggedGroup.getGroupName() + 
+                                  " at position " + originalGroupPosition);
+                
+                state.contextChanged();
+                state.getContextEditorUndoManager().makeRedoable();
+                
+                matrix.setCursor(Cursor.getDefaultCursor());
+                matrix.repaint();
+            }
+            
+            isDragging = false;
+            dragStartPoint = null;
+            dragStartColumn = -1;
+            dragCurrentColumn = -1;
+            draggedGroup = null;
+            originalGroupPosition = -1;
+        }
+        
+        @Override
+        public void mouseExited(MouseEvent e) {
+            if (isDragging) {
+                System.out.println("[DRAG] Cancelled (mouse exited)");
+                
+                isDragging = false;
+                dragStartPoint = null;
+                dragStartColumn = -1;
+                dragCurrentColumn = -1;
+                draggedGroup = null;
+                matrix.setCursor(Cursor.getDefaultCursor());
+                matrix.repaint();
+            }
+        }
+        
+        private AttributeGroup getGroupAtColumn(int col) {
+            boolean hasObjGroups = state.context.hasObjectGroups();
+            int objColOffset = hasObjGroups ? 1 : 0;
+            
+            if (col <= objColOffset) {
+                return null;
+            }
+            
+            Object headerValue = model.getValueAt(0, col);
+            if (headerValue == null) {
+                return null;
+            }
+            
+            String groupName = headerValue.toString().trim();
+            if (groupName.isEmpty()) {
+                return null;
+            }
+            
+            return state.context.getAttributeGroupManager().getGroupByName(groupName);
+        }
+        
+        private int calculateNewGroupPosition(int currentCol) {
+            boolean hasObjGroups = state.context.hasObjectGroups();
+            int objColOffset = hasObjGroups ? 1 : 0;
+            
+            if (currentCol <= objColOffset) {
+                return 0;
+            }
+            
+            int colIdx = 0;
+            int targetIdx = currentCol - objColOffset - 1;
+            int groupPosition = 0;
+            
+            for (AttributeGroup group : state.context.getAllAttributeGroups()) {
+                if (!group.isExpanded()) {
+                    if (colIdx <= targetIdx && targetIdx < colIdx + 1) {
+                        return groupPosition;
+                    }
+                    colIdx++;
+                } else {
+                    int groupSize = group.getAttributeCount();
+                    if (colIdx <= targetIdx && targetIdx < colIdx + groupSize) {
+                        return groupPosition;
+                    }
+                    colIdx += groupSize;
+                }
+                groupPosition++;
+            }
+            
+            return state.context.getAttributeGroupManager().getGroupCount() - 1;
+        }
+        
+        public boolean isDragging() {
+            return isDragging;
+        }
+        
+        public AttributeGroup getDraggedGroup() {
+            return draggedGroup;
+        }
+    }
 
     public WebScrollPane createStripedJScrollPane(Color bg) {
         WebScrollPane scrollPane = new WebScrollPane(this);
@@ -293,7 +502,6 @@ public class ContextMatrix extends JTable {
         }
     }
 
-    // Selecting
     private int lastSelectedRowsStartIndex;
     private int lastSelectedRowsEndIndex;
     private int lastSelectedColumnsStartIndex;
@@ -301,7 +509,7 @@ public class ContextMatrix extends JTable {
 
     public void selectCell(int row, int column) {
         row = clamp(row, 2, getRowCount() - 1);
-        int minCol = state.context.hasObjectGroups() ? 2 : 1; // Si col groupes, commencer à 2
+        int minCol = state.context.hasObjectGroups() ? 2 : 1;
         column = clamp(column, minCol, getColumnCount() - 1);
         setRowSelectionInterval(row, row);
         setColumnSelectionInterval(column, column);
@@ -381,7 +589,6 @@ public class ContextMatrix extends JTable {
     public int getLastSelectedColumnsStartIndex() { return lastSelectedColumnsStartIndex; }
     public int getLastSelectedColumnsEndIndex()   { return lastSelectedColumnsEndIndex; }
 
-    // Renaming
     public boolean isRenaming = false;
 
     private void makeHeaderCellsEditable() {
@@ -402,7 +609,8 @@ public class ContextMatrix extends JTable {
 
     public JTextField renameRowHeader(int i) {
         isRenaming = true;
-        editCellAt(i, 0);
+        int colIndex = state.context.hasObjectGroups() ? 1 : 0;
+        editCellAt(i, colIndex);
         requestFocus();
         ContextCellEditor ed = (ContextCellEditor) editor;
         ed.getTextField().requestFocus();
@@ -432,28 +640,75 @@ public class ContextMatrix extends JTable {
             JTextField f = (JTextField) super.getTableCellEditorComponent(
                     table, value, isSelected, row, column);
             model = (ContextMatrixModel) table.getModel();
-            String text;
-            if (column == 0) {
+            String text = "";
+            boolean hasObjGroups = state.context.hasObjectGroups();
+            int objCol = hasObjGroups ? 1 : 0;
+            
+            if (column == objCol && row >= 2) {
+                // Nom d'objet
                 text = model.getObjectNameAt(row - 2);
+                System.out.println("[EDITOR] Editing OBJECT at row " + row + ": " + text);
+            } else if (row == 1 && column > objCol) {
+                // ✅ FIX : Nom d'attribut (ligne 1 = header attributs)
+                // Récupérer DIRECTEMENT depuis la valeur affichée dans la cellule
+                Object cellValue = model.getValueAt(1, column);
+                if (cellValue != null) {
+                    text = cellValue.toString();
+                    // Si c'est un nom avec groupe (ex: "adult (AGE)"), extraire juste le nom
+                    if (text.contains(" (") && text.endsWith(")")) {
+                        text = text.substring(0, text.indexOf(" ("));
+                    }
+                }
+                System.out.println("[EDITOR] Editing ATTRIBUTE at col " + column + ": " + text);
             } else {
-                text = model.getAttributeNameAt(column - 1);
+                text = "";
             }
+            
             f.setText(text);
             lastName   = text;
             lastColumn = column;
             lastRow    = row;
             this.textField = f;
+            
             return f;
         }
 
         @Override
         public Object getCellEditorValue() {
-            String newName = super.getCellEditorValue().toString();
-            if (lastColumn == 0) {
-                model.renameObject(lastName, newName);
-            } else {
-                model.renameAttribute(lastName, newName);
+            String newName = super.getCellEditorValue().toString().trim();
+            boolean hasObjGroups = state.context.hasObjectGroups();
+            int objCol = hasObjGroups ? 1 : 0;
+            
+            System.out.println("[EDITOR] getCellEditorValue: lastName=" + lastName + " newName=" + newName);
+            
+            // ✅ FIX : Vérifier si le nom a VRAIMENT changé
+            if (newName.isEmpty() || newName.equals(lastName)) {
+                System.out.println("[EDITOR] Pas de changement, annulation");
+                ContextMatrix.this.isRenaming = false;
+                return super.getCellEditorValue();
             }
+            
+            // ✅ FIX : Renommer correctement selon le type
+            if (lastColumn == objCol && lastRow >= 2) {
+                // Renommer un OBJET
+                System.out.println("[EDITOR] Renaming object: " + lastName + " → " + newName);
+                boolean success = model.renameObject(lastName, newName);
+                if (!success) {
+                    System.out.println("[EDITOR] Rename échoué (nom déjà utilisé?)");
+                    // Restaurer l'ancien nom
+                    textField.setText(lastName);
+                }
+            } else {
+                // Renommer un ATTRIBUT
+                System.out.println("[EDITOR] Renaming attribute: " + lastName + " → " + newName);
+                boolean success = model.renameAttribute(lastName, newName);
+                if (!success) {
+                    System.out.println("[EDITOR] Rename échoué (nom déjà utilisé?)");
+                    // Restaurer l'ancien nom
+                    textField.setText(lastName);
+                }
+            }
+            
             ContextMatrix.this.isRenaming = false;
             return super.getCellEditorValue();
         }
@@ -461,7 +716,6 @@ public class ContextMatrix extends JTable {
         public JTextField getTextField() { return textField; }
     }
 
-    // Dragging
     private static Cursor dragCursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
     boolean isDraggingRow    = false;
     boolean isDraggingColumn = false;
@@ -478,11 +732,14 @@ public class ContextMatrix extends JTable {
                 lastDraggedRowIndex    = i;
                 lastDraggedColumnIndex = j;
                 if (!isResizing) {
-                    if (SwingUtilities.isLeftMouseButton(e) && j == 0 && i > 1) {
+                    boolean hasObjGroups = state.context.hasObjectGroups();
+                    int objCol = hasObjGroups ? 1 : 0;
+                    
+                    if (SwingUtilities.isLeftMouseButton(e) && j == objCol && i > 1) {
                         isDraggingRow = true;
                         setCursor(dragCursor);
                     }
-                    if (SwingUtilities.isLeftMouseButton(e) && (i == 0 || i == 1) && j > 0) {
+                    if (SwingUtilities.isLeftMouseButton(e) && (i == 0 || i == 1) && j > objCol) {
                         isDraggingColumn = true;
                         setCursor(dragCursor);
                     }
@@ -520,15 +777,18 @@ public class ContextMatrix extends JTable {
                 int i = rowAtPoint(e.getPoint());
                 int j = columnAtPoint(e.getPoint());
                 if (!isResizing && !didReorderOccur) {
-                    if (SwingUtilities.isLeftMouseButton(e) && j == 0 && i > 1) {
+                    boolean hasObjGroups = state.context.hasObjectGroups();
+                    int objCol = hasObjGroups ? 1 : 0;
+                    
+                    if (SwingUtilities.isLeftMouseButton(e) && j == objCol && i > 1) {
                         if (!wasRowSelected(i)) selectRow(i);
                         else clearSelection();
                     }
-                    if (SwingUtilities.isLeftMouseButton(e) && (i == 0 || i == 1) && j > 0) {
+                    if (SwingUtilities.isLeftMouseButton(e) && (i == 0 || i == 1) && j > objCol) {
                         if (!wasColumnSelected(j)) selectColumn(j);
                         else clearSelection();
                     }
-                    if (SwingUtilities.isLeftMouseButton(e) && (i == 0 || i == 1) && j == 0) {
+                    if (SwingUtilities.isLeftMouseButton(e) && (i == 0 || i == 1) && j <= objCol) {
                         if (!wasAllSelected()) selectAll();
                         else clearSelection();
                     }
@@ -548,7 +808,6 @@ public class ContextMatrix extends JTable {
         addMouseMotionListener(mouseAdapter);
     }
 
-    // Resizing
     public static final int DEFAULT_COLUMN_WIDTH   = 80;
     public static final int COMPACTED_COLUMN_WIDTH = 15;
     private static Cursor resizeCursor = Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR);
@@ -716,7 +975,6 @@ public class ContextMatrix extends JTable {
         addMouseMotionListener(columnResizeMouseAdapter);
     }
 
-    // Drawing
     private class StripedViewport extends JViewport {
 
         private static final long serialVersionUID = 171992496170114834L;
@@ -755,16 +1013,26 @@ public class ContextMatrix extends JTable {
         protected void paintComponent(Graphics g) {
             paintBackground(g);
             paintStripedBackground(g);
-            paintVerticalHeaderBackground(g);
+            boolean hasObjGroups = state.context.hasObjectGroups();
+            if (hasObjGroups) {
+                paintVerticalHeaderBackground(g);
+            }
             paintHorizontalHeaderBackground(g);
             paintGridLines(g);
-            super.paintComponent(g);
         }
 
         private void paintBackground(Graphics g) {
-            g.setColor(BACKGROUND_COLOR);
-            g.fillRect(g.getClipBounds().x, g.getClipBounds().y,
-                       g.getClipBounds().width, g.getClipBounds().height);
+            int tableHeight = fTable.getRowCount() * fTable.getRowHeight();
+            int offsetY = getViewPosition().y;
+            int visibleHeight = Math.min(tableHeight - offsetY, getHeight());
+            
+            if (visibleHeight > 0) {
+                g.setColor(BACKGROUND_COLOR);
+                g.fillRect(g.getClipBounds().x, 
+                           g.getClipBounds().y,
+                           g.getClipBounds().width, 
+                           visibleHeight);
+            }
         }
 
         private void paintStripedBackground(Graphics g) {
@@ -795,13 +1063,10 @@ public class ContextMatrix extends JTable {
             for (int j = 2; j < fTable.getRowCount(); j++) {
                 g.fillRect(x, y + j * rowHeight, firstColumnWidth, rowHeight);
             }
+            
             if (isDraggingRow) {
                 g.setColor(new Color(230, 230, 230));
                 g.fillRect(x, y + lastDraggedRowIndex * rowHeight + 1, firstColumnWidth, rowHeight - 1);
-            }
-            g.setColor(HEADER_SEPARATOR_COLOR);
-            for (int j = 2; j < fTable.getRowCount() + 1; j++) {
-                g.drawLine(x + 3, y + j * rowHeight, x + firstColumnWidth - 4, y + j * rowHeight);
             }
         }
 
@@ -814,11 +1079,9 @@ public class ContextMatrix extends JTable {
             int x = -offsetX;
             int y = -offsetY;
 
-            // Ligne 0 : Noms des GROUPES
             g.setColor(GROUP_HEADER_COLOR);
             g.fillRect(x, y, tableWidth, rowHeight);
 
-            // Ligne 1 : Noms des ATTRIBUTS
             GradientPaint gp = new GradientPaint(0, rowHeight, HEADER_COLOR_START,
                                                  0, 2 * rowHeight, HEADER_COLOR_END);
             g.setPaint(gp);
@@ -847,23 +1110,32 @@ public class ContextMatrix extends JTable {
         private void paintGridLines(Graphics g) {
             int tableHeight      = fTable.getHeight();
             int rowHeight        = fTable.getRowHeight();
-            int firstColumnWidth = fTable.getColumnModel().getColumn(0).getWidth();
+            boolean hasObjGroups = state.context.hasObjectGroups();
+            int firstColIndex    = hasObjGroups ? 1 : 0;
+            int firstColumnWidth = hasObjGroups ? 
+                fTable.getColumnModel().getColumn(0).getWidth() + fTable.getColumnModel().getColumn(1).getWidth() :
+                fTable.getColumnModel().getColumn(0).getWidth();
             int offsetX          = getViewPosition().x;
             int offsetY          = getViewPosition().y;
             int x = -offsetX;
             int y = -offsetY;
             g.setColor(TABLE_GRID_COLOR);
 
-            for (int i = 0; i < fTable.getColumnCount(); i++) {
+            // ✅ Lignes verticales (entre les colonnes)
+            for (int i = firstColIndex; i < fTable.getColumnCount(); i++) {
                 TableColumn column = fTable.getColumnModel().getColumn(i);
                 x += column.getWidth();
                 g.drawLine(x - 1, y + 2 * rowHeight, x - 1, y + tableHeight);
             }
             g.drawLine(x - 1, y, x - 1, y + tableHeight);
 
+            // ✅ Lignes horizontales DANS LA ZONE DE DONNÉES SEULEMENT
+            // Commence à firstColumnWidth (après la colonne des objets)
             for (int j = 2; j < fTable.getRowCount() + 1; j++) {
                 g.drawLine(-offsetX + firstColumnWidth, y + j * rowHeight, x - 1, y + j * rowHeight);
             }
+            
+            // ✅ Ligne du bas
             g.drawLine(-offsetX, y + fTable.getRowCount() * rowHeight,
                         x - 1,  y + fTable.getRowCount() * rowHeight);
         }
