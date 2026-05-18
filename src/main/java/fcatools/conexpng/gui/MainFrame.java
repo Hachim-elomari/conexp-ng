@@ -44,6 +44,7 @@ import fcatools.conexpng.gui.contexteditor.ContextEditorUndoManager;
 import fcatools.conexpng.gui.dependencies.DependencyView;
 import fcatools.conexpng.gui.lattice.LatticeView;
 import fcatools.conexpng.gui.lattice.LatticeViewUndoManager;
+import fcatools.conexpng.gui.thresholds.ThresholdView;   // (F2) ← NOUVEAU
 import fcatools.conexpng.io.locale.LocaleHandler;
 
 public class MainFrame extends WebFrame {
@@ -51,14 +52,15 @@ public class MainFrame extends WebFrame {
     private static final long serialVersionUID = -3768163989667340886L;
     private static final String MARGIN = "                              ";
 
-    private WebPanel mainPanel;
-    private WebTabbedPane tabPane;
-    private WebLabel viewTitleLabel;
-    private ContextEditor contextView;
-    private LatticeView latticeView;
+    private WebPanel       mainPanel;
+    private WebTabbedPane  tabPane;
+    private WebLabel       viewTitleLabel;
+    private ContextEditor  contextView;
+    private LatticeView    latticeView;
     private DependencyView associationView;
-    private Conf state;
-    private StatusBar statusBar;
+    private ThresholdView  thresholdView;   // (F2) ← NOUVEAU
+    private Conf           state;
+    private StatusBar      statusBar;
 
     @SuppressWarnings({ "serial" })
     public MainFrame(final Conf state) {
@@ -87,13 +89,13 @@ public class MainFrame extends WebFrame {
 
         tabPane = new WebTabbedPane() {
             public Dimension getPreferredSize() {
-                Dimension ps = super.getPreferredSize(); ps.width = 150; return ps;
+                Dimension ps = super.getPreferredSize(); ps.width = 145; return ps;
             }
         };
         tabPane.setTabbedPaneStyle(TabbedPaneStyle.attached);
         tabPane.setTabPlacement(WebTabbedPane.TOP);
         WebPanel tabPanel = new WebPanel();
-        tabPanel.setPreferredSize(new Dimension(105, 30));
+        tabPanel.setPreferredSize(new Dimension(145, 30));
         tabPanel.add(tabPane);
 
         WebPanel topPanel = new WebPanel(new BorderLayout());
@@ -109,10 +111,13 @@ public class MainFrame extends WebFrame {
         topPanel.add(centerPanel, BorderLayout.CENTER);
         mainPanel.add(topPanel, BorderLayout.NORTH);
 
+        // ── Instancier les vues ───────────────────────────────────────────────
         contextView     = new ContextEditor(state);     contextView.setVisible(false);
         latticeView     = new LatticeView(state, this); latticeView.setVisible(false);
         associationView = new DependencyView(state);    associationView.setVisible(false);
+        thresholdView   = new ThresholdView(state);     thresholdView.setVisible(false); // (F2)
 
+        // ── Ajouter les onglets ───────────────────────────────────────────────
         addTab(tabPane, contextView,     "icons/tabs/context_editor.png",
             LocaleHandler.getString("MainFrame.MainFrame.tab.0.title"),
             LocaleHandler.getString("MainFrame.MainFrame.tab.0.toolTip"), 0);
@@ -122,6 +127,13 @@ public class MainFrame extends WebFrame {
         addTab(tabPane, associationView, "icons/tabs/dependencies_editor.png",
             LocaleHandler.getString("MainFrame.MainFrame.tab.2.title"),
             LocaleHandler.getString("MainFrame.MainFrame.tab.2.toolTip"), 2);
+
+        // (F2) ── Onglet Thresholds ──────────────────────────────────────────
+        // Icône : réutilise context_editor.png comme placeholder.
+        // Remplacez par "icons/tabs/thresholds.png" si vous ajoutez une icône dédiée.
+        addTab(tabPane, thresholdView,   "icons/tabs/context_editor.png",
+            "Thresholds",
+            "Continuous to Boolean conversion via thresholds (Ctrl+T)", 3);
 
         statusBar = StatusBar.getInstance();
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(140, 140, 140)));
@@ -134,9 +146,10 @@ public class MainFrame extends WebFrame {
             public void stateChanged(ChangeEvent e) {
                 WebTabbedPane src = (WebTabbedPane) e.getSource();
                 switch (src.getSelectedIndex()) {
-                case 0: showContextEditor();    break;
-                case 1: showLatticeEditor();    break;
-                case 2: showDependenciesEditor(); break;
+                case 0: showContextEditor();       break;
+                case 1: showLatticeEditor();       break;
+                case 2: showDependenciesEditor();  break;
+                case 3: showThresholdsEditor();    break; // (F2)
                 }
             }
         });
@@ -145,7 +158,6 @@ public class MainFrame extends WebFrame {
 
     // =========================================================================
     // (F1) : Vérifier les attributs orphelins si on quitte le Context Editor
-    // Retourne true = peut continuer, false = rester dans Context Editor
     // =========================================================================
     public boolean checkOrphanGroupingStateIfNeeded() {
         if (state.guiConf.lastTab == 0) {
@@ -157,11 +169,16 @@ public class MainFrame extends WebFrame {
     private void selectLastUsedTab() {
         tabPane.setSelectedIndex(state.guiConf.lastTab);
         switch (state.guiConf.lastTab) {
-        case 0: showContextEditor();    break;
-        case 1: showLatticeEditor();    break;
-        case 2: showDependenciesEditor(); break;
+        case 0: showContextEditor();       break;
+        case 1: showLatticeEditor();       break;
+        case 2: showDependenciesEditor();  break;
+        case 3: showThresholdsEditor();    break; // (F2)
         }
     }
+
+    // =========================================================================
+    // Méthodes d'affichage des vues
+    // =========================================================================
 
     public void showContextEditor() {
         ContextEditorUndoManager undoManager = state.getContextEditorUndoManager();
@@ -206,23 +223,60 @@ public class MainFrame extends WebFrame {
         validate(); revalidate(); repaint();
     }
 
+    // (F2) ── Nouvel onglet Thresholds ────────────────────────────────────────
+    public void showThresholdsEditor() {
+        // Même garde que pour les autres onglets
+        if (state.guiConf.lastTab == 0 && !contextView.checkOrphanGroupingState()) {
+            tabPane.setSelectedIndex(0);
+            return;
+        }
+        // Undo/Redo désactivés dans cet onglet (pas d'historique propre)
+        MainToolbar.getRedoButton().setEnabled(false);
+        MainToolbar.getUndoButton().setEnabled(false);
+
+        state.guiConf.lastTab = 3;
+        removeOldView();
+        thresholdView.setVisible(true);
+        viewTitleLabel.setText("Thresholds  —  Continuous → Boolean" + MARGIN);
+        mainPanel.add(thresholdView, BorderLayout.CENTER);
+        validate(); revalidate(); repaint();
+    }
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+
     private void removeOldView() {
         BorderLayout layout = (BorderLayout) mainPanel.getLayout();
         Component component = layout.getLayoutComponent(BorderLayout.CENTER);
         if (component != null) { component.setVisible(false); mainPanel.remove(component); }
     }
 
-    private void addTab(WebTabbedPane t, View v, String iconPath, String title, String toolTip, int i) {
+    private void addTab(WebTabbedPane t, View v, String iconPath,
+                        String title, String toolTip, int i) {
         t.addTab("", loadIcon(iconPath), null, toolTip);
         KeyStroke shortcut = null;
         switch (i) {
         case 0: shortcut = KeyStroke.getKeyStroke(KeyEvent.VK_E, InputEvent.CTRL_DOWN_MASK); break;
         case 1: shortcut = KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK); break;
         case 2: shortcut = KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK); break;
+        case 3: shortcut = KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK); break; // (F2)
         }
         t.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(shortcut, title);
         t.getActionMap().put(title, new SwitchTab(i, t));
     }
+
+    public void updateGUI() {
+        selectLastUsedTab();
+        associationView.updateGUI();
+        contextView.updateButtonSelection();
+        latticeView.updateGUI();
+        // thresholdView se met à jour via propertyChange (aucune action manuelle requise)
+    }
+
+    // =========================================================================
+    // Classes internes (inchangées)
+    // =========================================================================
 
     @SuppressWarnings("serial")
     private class SwitchTab extends AbstractAction {
@@ -302,12 +356,5 @@ public class MainFrame extends WebFrame {
             else if (n.equals(LocaleHandler.getString("no")))     { cancel = false; no = true; yes = false; }
         }
         public boolean isYes() { return yes; } public boolean isNo() { return no; } public boolean isCancel() { return cancel; }
-    }
-
-    public void updateGUI() {
-        selectLastUsedTab();
-        associationView.updateGUI();
-        contextView.updateButtonSelection();
-        latticeView.updateGUI();
     }
 }
