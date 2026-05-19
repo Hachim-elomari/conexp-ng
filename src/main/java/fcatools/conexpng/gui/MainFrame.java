@@ -44,7 +44,7 @@ import fcatools.conexpng.gui.contexteditor.ContextEditorUndoManager;
 import fcatools.conexpng.gui.dependencies.DependencyView;
 import fcatools.conexpng.gui.lattice.LatticeView;
 import fcatools.conexpng.gui.lattice.LatticeViewUndoManager;
-import fcatools.conexpng.gui.thresholds.ThresholdView;   // (F2) ← NOUVEAU
+import fcatools.conexpng.gui.thresholds.RawDataView;   // (F2) ✅ RawDataView instead of ThresholdView
 import fcatools.conexpng.io.locale.LocaleHandler;
 
 public class MainFrame extends WebFrame {
@@ -58,7 +58,7 @@ public class MainFrame extends WebFrame {
     private ContextEditor  contextView;
     private LatticeView    latticeView;
     private DependencyView associationView;
-    private ThresholdView  thresholdView;   // (F2) ← NOUVEAU
+    private RawDataView    rawDataView;   // (F2) ✅ RawDataView instead of ThresholdView
     private Conf           state;
     private StatusBar      statusBar;
 
@@ -89,13 +89,13 @@ public class MainFrame extends WebFrame {
 
         tabPane = new WebTabbedPane() {
             public Dimension getPreferredSize() {
-                Dimension ps = super.getPreferredSize(); ps.width = 145; return ps;
+                Dimension ps = super.getPreferredSize(); ps.width = 145; return ps;  // (F2) ✅ Increased for 4 tabs
             }
         };
         tabPane.setTabbedPaneStyle(TabbedPaneStyle.attached);
         tabPane.setTabPlacement(WebTabbedPane.TOP);
         WebPanel tabPanel = new WebPanel();
-        tabPanel.setPreferredSize(new Dimension(145, 30));
+        tabPanel.setPreferredSize(new Dimension(145, 30));  // (F2) ✅ Increased for 4 tabs
         tabPanel.add(tabPane);
 
         WebPanel topPanel = new WebPanel(new BorderLayout());
@@ -115,7 +115,7 @@ public class MainFrame extends WebFrame {
         contextView     = new ContextEditor(state);     contextView.setVisible(false);
         latticeView     = new LatticeView(state, this); latticeView.setVisible(false);
         associationView = new DependencyView(state);    associationView.setVisible(false);
-        thresholdView   = new ThresholdView(state);     thresholdView.setVisible(false); // (F2)
+        rawDataView     = new RawDataView(state);       rawDataView.setVisible(false); // (F2) ✅ RawDataView
 
         // ── Ajouter les onglets ───────────────────────────────────────────────
         addTab(tabPane, contextView,     "icons/tabs/context_editor.png",
@@ -128,12 +128,10 @@ public class MainFrame extends WebFrame {
             LocaleHandler.getString("MainFrame.MainFrame.tab.2.title"),
             LocaleHandler.getString("MainFrame.MainFrame.tab.2.toolTip"), 2);
 
-        // (F2) ── Onglet Thresholds ──────────────────────────────────────────
-        // Icône : réutilise context_editor.png comme placeholder.
-        // Remplacez par "icons/tabs/thresholds.png" si vous ajoutez une icône dédiée.
-        addTab(tabPane, thresholdView,   "icons/tabs/context_editor.png",
-            "Thresholds",
-            "Continuous to Boolean conversion via thresholds (Ctrl+T)", 3);
+        // (F2) ✅ Onglet Raw Data (Ctrl+R) ──────────────────────────────────────
+        addTab(tabPane, rawDataView,   "icons/tabs/context_editor.png",
+            "Raw Data",
+            "Continuous to Boolean conversion (Ctrl+R)", 3);
 
         statusBar = StatusBar.getInstance();
         statusBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(140, 140, 140)));
@@ -149,7 +147,7 @@ public class MainFrame extends WebFrame {
                 case 0: showContextEditor();       break;
                 case 1: showLatticeEditor();       break;
                 case 2: showDependenciesEditor();  break;
-                case 3: showThresholdsEditor();    break; // (F2)
+                case 3: showRawDataEditor();       break; // (F2) ✅ RawData
                 }
             }
         });
@@ -172,7 +170,7 @@ public class MainFrame extends WebFrame {
         case 0: showContextEditor();       break;
         case 1: showLatticeEditor();       break;
         case 2: showDependenciesEditor();  break;
-        case 3: showThresholdsEditor();    break; // (F2)
+        case 3: showRawDataEditor();       break; // (F2) ✅ RawData
         }
     }
 
@@ -223,8 +221,8 @@ public class MainFrame extends WebFrame {
         validate(); revalidate(); repaint();
     }
 
-    // (F2) ── Nouvel onglet Thresholds ────────────────────────────────────────
-    public void showThresholdsEditor() {
+    // (F2) ✅ Nouvel onglet Raw Data (renommé depuis Thresholds) ──────────────
+    public void showRawDataEditor() {
         // Même garde que pour les autres onglets
         if (state.guiConf.lastTab == 0 && !contextView.checkOrphanGroupingState()) {
             tabPane.setSelectedIndex(0);
@@ -236,9 +234,9 @@ public class MainFrame extends WebFrame {
 
         state.guiConf.lastTab = 3;
         removeOldView();
-        thresholdView.setVisible(true);
-        viewTitleLabel.setText("Thresholds  —  Continuous → Boolean" + MARGIN);
-        mainPanel.add(thresholdView, BorderLayout.CENTER);
+        rawDataView.setVisible(true);
+        viewTitleLabel.setText("Raw Data  —  Continuous → Boolean" + MARGIN);
+        mainPanel.add(rawDataView, BorderLayout.CENTER);
         validate(); revalidate(); repaint();
     }
 
@@ -260,7 +258,7 @@ public class MainFrame extends WebFrame {
         case 0: shortcut = KeyStroke.getKeyStroke(KeyEvent.VK_E, InputEvent.CTRL_DOWN_MASK); break;
         case 1: shortcut = KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK); break;
         case 2: shortcut = KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK); break;
-        case 3: shortcut = KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK); break; // (F2)
+        case 3: shortcut = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK); break; // (F2) ✅ Ctrl+R
         }
         t.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(shortcut, title);
         t.getActionMap().put(title, new SwitchTab(i, t));
@@ -271,7 +269,7 @@ public class MainFrame extends WebFrame {
         associationView.updateGUI();
         contextView.updateButtonSelection();
         latticeView.updateGUI();
-        // thresholdView se met à jour via propertyChange (aucune action manuelle requise)
+        // rawDataView se met à jour via propertyChange (aucune action manuelle requise)
     }
 
     // =========================================================================
