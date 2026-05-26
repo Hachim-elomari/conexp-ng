@@ -206,6 +206,21 @@ public class RawDataView extends View {
                 importExcelFile();
             }
         });
+        
+        // ✅ NEW: Export Excel button
+        JButton exportButton = new JButton("Export Excel...");
+        exportButton.setFont(exportButton.getFont().deriveFont(Font.BOLD, 13f));
+        exportButton.setBackground(new Color(33, 150, 243));
+        exportButton.setForeground(Color.BLACK);  // ✅ Texte noir
+        exportButton.setOpaque(true);
+        exportButton.setBorderPainted(false);
+        exportButton.setPreferredSize(new Dimension(150, 36));
+        exportButton.setFocusPainted(false);
+        exportButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                exportExcelFile();
+            }
+        });
 
         JLabel hintLabel = new JLabel(
                 "  After applying, switch to Lattice tab to generate the updated lattice.");
@@ -216,6 +231,7 @@ public class RawDataView extends View {
         southPanel.setBorder(BorderFactory.createMatteBorder(
                 1, 0, 0, 0, new Color(140, 140, 140)));
         southPanel.add(importButton);  // ✅ Import Excel button
+        southPanel.add(exportButton);  // ✅ Export Excel button
         southPanel.add(applyButton);
         southPanel.add(hintLabel);
 
@@ -419,6 +435,86 @@ public class RawDataView extends View {
                 "You can now adjust thresholds and click Apply.",
                 "Import Complete",
                 JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /**
+     * Export continuous values matrix to an Excel file (.xlsx or .xls).
+     */
+    private void exportExcelFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileFilter(new FileNameExtensionFilter("Excel Files (*.xlsx)", "xlsx"));
+        fileChooser.setDialogTitle("Export to Excel");
+        fileChooser.setSelectedFile(new File("raw_data_export.xlsx"));
+        
+        int result = fileChooser.showSaveDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) {
+            return;  // User cancelled
+        }
+        
+        File file = fileChooser.getSelectedFile();
+        
+        // Ensure .xlsx extension
+        if (!file.getName().toLowerCase().endsWith(".xlsx")) {
+            file = new File(file.getAbsolutePath() + ".xlsx");
+        }
+        
+        try {
+            // Create workbook
+            org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = 
+                    new org.apache.poi.xssf.usermodel.XSSFWorkbook();
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("Raw Data");
+            
+            // ── Step 1: Create header row ─────────────────────────────────────
+            org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
+            headerRow.createCell(0).setCellValue("");  // Empty A1
+            
+            for (int i = 0; i < matrixModel.attrList.size(); i++) {
+                headerRow.createCell(i + 1).setCellValue(matrixModel.attrList.get(i));
+            }
+            
+            // ── Step 2: Create data rows ──────────────────────────────────────
+            for (int i = 0; i < matrixModel.objList.size(); i++) {
+                org.apache.poi.ss.usermodel.Row row = sheet.createRow(i + 1);
+                String obj = matrixModel.objList.get(i);
+                row.createCell(0).setCellValue(obj);
+                
+                Map<String, Double> objValues = continuousValues.get(obj);
+                if (objValues != null) {
+                    for (int j = 0; j < matrixModel.attrList.size(); j++) {
+                        String attr = matrixModel.attrList.get(j);
+                        Double value = objValues.get(attr);
+                        if (value != null) {
+                            row.createCell(j + 1).setCellValue(value);
+                        }
+                    }
+                }
+            }
+            
+            // ── Step 3: Auto-size columns ─────────────────────────────────────
+            for (int i = 0; i <= matrixModel.attrList.size(); i++) {
+                sheet.autoSizeColumn(i);
+            }
+            
+            // ── Step 4: Write to file ─────────────────────────────────────────
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(file);
+            workbook.write(fos);
+            fos.close();
+            workbook.close();
+            
+            JOptionPane.showMessageDialog(this,
+                    "Export successful!\n\n" +
+                    "File saved to:\n" + file.getAbsolutePath() + "\n\n" +
+                    "Attributes: " + matrixModel.attrList.size() + "\n" +
+                    "Objects: " + matrixModel.objList.size(),
+                    "Export Complete",
+                    JOptionPane.INFORMATION_MESSAGE);
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                    "Failed to export Excel file:\n\n" + ex.getMessage(),
+                    "Export Error",
+                    JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /**

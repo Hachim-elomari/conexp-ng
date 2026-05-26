@@ -124,6 +124,10 @@ public class Main {
         } catch (IllegalObjectException e1) {
             e1.printStackTrace();
         }
+        
+        // ✅ FIX BUG: Ensure all attributes and objects are considered (checked) by default
+        context.clearConsidered();
+        
         state.newContext(context);
         state.lattice = new LatticeGraph();
     }
