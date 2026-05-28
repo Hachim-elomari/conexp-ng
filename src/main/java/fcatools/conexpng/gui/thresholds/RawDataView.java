@@ -34,7 +34,7 @@ import fcatools.conexpng.gui.thresholds.RawDataConfig.Mode;
 @SuppressWarnings("serial")
 public class RawDataView extends View {
 
-    // ── Couleurs ─────────────────────────────────────────────────────────────
+    // ── Couleurs booléennes (THRESHOLD / MIN_MAX) — pastels pâles ─────────────
     private static final Color COLOR_HEADER         = new Color(220, 220, 220);
     private static final Color COLOR_ABOVE          = new Color(200, 240, 200);
     private static final Color COLOR_BELOW          = new Color(255, 220, 220);
@@ -44,6 +44,58 @@ public class RawDataView extends View {
     private static final Color COLOR_DRAG_HIGHLIGHT = new Color(100, 150, 255, 80);
     private static final Color COLOR_GEO_BG         = new Color(215, 235, 255);
     private static final Color COLOR_UNI_BG         = new Color(240, 215, 255);
+
+    // ── Gradient de classes (Géométrique & Uniforme) ───────────────────────────
+    // Source officielle : Indice de Durabilité — Charte CGDD / DITP (juin 2024)
+    //   Rouge foncé  Pantone 7427 C  RVB 151 ; 27 ; 46
+    //   Rouge        Pantone 186 C   RVB 210 ; 16 ; 52
+    //   Orange       Pantone 1585 C  RVB 255 ; 105 ; 0
+    //   Jaune        Pantone 7548 C  RVB 255 ; 198 ; 0
+    //   Vert foncé   Pantone 347 C   RVB 0 ; 149 ; 67
+    // Les couleurs sont allégées à 45 % (mélange blanc) pour conserver
+    // une lisibilité optimale du texte noir sur fond coloré.
+    private static final Color[] CLASS_COLOR_ANCHORS = {
+        lightenColor(new Color(151,  27,  46), 0.45f),  // rouge foncé
+        lightenColor(new Color(210,  16,  52), 0.45f),  // rouge
+        lightenColor(new Color(255, 105,   0), 0.45f),  // orange
+        lightenColor(new Color(255, 198,   0), 0.45f),  // jaune
+        lightenColor(new Color(  0, 149,  67), 0.45f),  // vert foncé
+    };
+
+    /**
+     * Mélange une couleur avec du blanc selon un facteur [0..1].
+     * factor=0 → couleur d'origine, factor=1 → blanc pur.
+     */
+    private static Color lightenColor(Color c, float factor) {
+        int r = Math.min(255, (int)(c.getRed()   + (255 - c.getRed())   * factor));
+        int g = Math.min(255, (int)(c.getGreen() + (255 - c.getGreen()) * factor));
+        int b = Math.min(255, (int)(c.getBlue()  + (255 - c.getBlue())  * factor));
+        return new Color(r, g, b);
+    }
+
+    /**
+     * Retourne la couleur interpolée pour la classe {@code cls} (1..n)
+     * parmi {@code totalClasses} en traversant les 5 ancres officielles.
+     *
+     * Classe 1 (la plus basse) → rouge foncé.
+     * Classe n (la plus haute) → vert foncé.
+     * Classes intermédiaires  → interpolation linéaire rouge→orange→jaune→vert.
+     */
+    private static Color getClassColor(int cls, int totalClasses) {
+        if (totalClasses <= 1) return CLASS_COLOR_ANCHORS[CLASS_COLOR_ANCHORS.length - 1];
+        double pos    = (double)(cls - 1) / (totalClasses - 1); // [0.0, 1.0]
+        double scaled = pos * (CLASS_COLOR_ANCHORS.length - 1);
+        int    idx    = (int) scaled;
+        if (idx >= CLASS_COLOR_ANCHORS.length - 1)
+            return CLASS_COLOR_ANCHORS[CLASS_COLOR_ANCHORS.length - 1];
+        double t  = scaled - idx;
+        Color  ca = CLASS_COLOR_ANCHORS[idx];
+        Color  cb = CLASS_COLOR_ANCHORS[idx + 1];
+        int    r  = Math.min(255, (int)(ca.getRed()   + t * (cb.getRed()   - ca.getRed())));
+        int    gv = Math.min(255, (int)(ca.getGreen() + t * (cb.getGreen() - ca.getGreen())));
+        int    bv = Math.min(255, (int)(ca.getBlue()  + t * (cb.getBlue()  - ca.getBlue())));
+        return new Color(r, gv, bv);
+    }
 
     // ── Données ───────────────────────────────────────────────────────────────
     private Map<String, RawDataConfig>       rawDataConfigs   = new LinkedHashMap<String, RawDataConfig>();
@@ -161,6 +213,7 @@ public class RawDataView extends View {
         });
 
         setupModeClickListener();
+        setupAttributeRightClickMenu();
         setupDragAndDrop();
 
         matrixTable.getTableHeader().addMouseListener(new MouseAdapter() {
@@ -186,8 +239,8 @@ public class RawDataView extends View {
         JScrollPane matrixScroll = new JScrollPane(matrixTable);
         matrixScroll.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createEtchedBorder(),
-                "  Continuous Values  -  Right-click to duplicate or drag to reorder  " +
-                "  |  green = will be checked  |  red = will be empty  ",
+                "  Continuous Values  |  Seuil/Min-Max : vert = coché, rouge = vide  " +
+                " |  Géo/Uni : gradient rouge foncé → vert (classe basse → haute)  ",
                 TitledBorder.LEFT, TitledBorder.TOP,
                 matrixTable.getFont().deriveFont(Font.BOLD)));
 
@@ -701,6 +754,18 @@ public class RawDataView extends View {
         }
     }
 
+    // =========================================================================
+    // setupAttributeRightClickMenu
+    // La logique d'inversion est maintenant intégrée dans showHeaderContextMenu()
+    // qui gère déjà le clic droit sur le header du matrixTable.
+    // Cette méthode est conservée pour ne pas modifier buildUI().
+    // =========================================================================
+
+    private void setupAttributeRightClickMenu() {
+        // Rien à faire : l'inversion des couleurs est dans showHeaderContextMenu().
+        // Un seul listener sur le header évite les doubles popups.
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // setupModeClickListener — JPopupMenu par clic, une instance par ligne
     //
@@ -740,10 +805,10 @@ public class RawDataView extends View {
                 final Mode[] modes = Mode.values();
                 for (int mi = 0; mi < modes.length; mi++) {
                     final Mode m = modes[mi];
-                    // Texte simple : "✓  Seuil" pour le mode courant, "   Seuil" sinon
+                    // Texte simple : "→  Seuil" pour le mode courant, "   Seuil" sinon
                     // PAS de setBackground/setOpaque : WebLaF ne repeint pas le fond
                     // des JMenuItem et laisse du texte fantôme (superposition).
-                    String prefix = (cfg.getMode() == m) ? "✓  " : "    ";
+                    String prefix = (cfg.getMode() == m) ? "→  " : "    ";
                     JMenuItem item = new JMenuItem(prefix + modeName(m));
                     item.setFont(cfg.getMode() == m
                             ? item.getFont().deriveFont(Font.BOLD, 12f)
@@ -896,13 +961,64 @@ public class RawDataView extends View {
     private void showHeaderContextMenu(MouseEvent e) {
         final int col = matrixTable.columnAtPoint(e.getPoint());
         if (col <= 0) return;
+
+        final String attr = (col - 1 < matrixModel.attrList.size())
+                ? matrixModel.attrList.get(col - 1) : null;
+        final RawDataConfig cfg = (attr != null) ? rawDataConfigs.get(attr) : null;
+
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem dup = new JMenuItem("Duplicate Attribute");
+
+        // ── Titre ─────────────────────────────────────────────────────────────
+        if (attr != null) {
+            JLabel title = new JLabel("  Attribut [" + attr + "]");
+            title.setFont(title.getFont().deriveFont(Font.BOLD, 11f));
+            title.setForeground(new Color(60, 60, 120));
+            title.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+            menu.add(title);
+            menu.addSeparator();
+        }
+
+        // ── Dupliquer ─────────────────────────────────────────────────────────
+        JMenuItem dup = new JMenuItem("Dupliquer l'attribut");
         dup.setFont(dup.getFont().deriveFont(Font.BOLD));
         dup.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent ae) { duplicateAttribute(col); }
         });
         menu.add(dup);
+
+        // ── Inverser les couleurs (uniquement si config disponible) ───────────
+        if (cfg != null) {
+            menu.addSeparator();
+            boolean inverted = cfg.isInvertColors();
+            String label = inverted
+                    ? "[↑↓] Retablir l'ordre des couleurs"
+                    : "[↑↓] Inverser les couleurs";
+            JMenuItem invertItem = new JMenuItem(label);
+            invertItem.setFont(invertItem.getFont().deriveFont(Font.BOLD));
+            invertItem.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent ae) {
+                    cfg.setInvertColors(!cfg.isInvertColors());
+                    configModel.fireTableDataChanged();
+                    matrixModel.fireTableDataChanged();
+                }
+            });
+            menu.add(invertItem);
+
+            // Info état actuel
+            Mode m = cfg.getMode();
+            String info;
+            if (m == Mode.GEOMETRIC || m == Mode.UNIFORME) {
+                info = inverted ? "  rouge = classe haute" : "  rouge = classe basse";
+            } else {
+                info = inverted ? "  vert = en dessous du seuil" : "  vert = au-dessus du seuil";
+            }
+            JLabel infoLbl = new JLabel(info);
+            infoLbl.setFont(infoLbl.getFont().deriveFont(Font.ITALIC, 10f));
+            infoLbl.setForeground(new Color(100, 100, 100));
+            infoLbl.setBorder(BorderFactory.createEmptyBorder(2, 8, 4, 8));
+            menu.add(infoLbl);
+        }
+
         menu.show(matrixTable.getTableHeader(), e.getX(), e.getY());
     }
 
@@ -1174,35 +1290,140 @@ public class RawDataView extends View {
         File file = fc.getSelectedFile();
         if (!file.getName().toLowerCase().endsWith(".xlsx"))
             file = new File(file.getAbsolutePath() + ".xlsx");
+
+        // ── Demande format pour attributs GEOMETRIC / UNIFORME ──────────────
+        boolean hasClassModes = false;
+        for (String attr : matrixModel.attrList) {
+            RawDataConfig cfg = rawDataConfigs.get(attr);
+            if (cfg != null && (cfg.getMode() == Mode.GEOMETRIC || cfg.getMode() == Mode.UNIFORME)) {
+                hasClassModes = true; break;
+            }
+        }
+        boolean exportClassified = false;
+        if (hasClassModes) {
+            int choice = JOptionPane.showOptionDialog(this,
+                    "Certains attributs sont en mode Géométrique ou Uniforme.\n\n" +
+                    "  • Données brutes   : export des valeurs numériques originales\n" +
+                    "  • Avec classes     : export des étiquettes C1/C2… ou U1/U2…",
+                    "Format d'export",
+                    JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null,
+                    new String[]{ "Données brutes", "Avec classes (C1, U2…)", "Annuler" },
+                    "Données brutes");
+            if (choice == 2 || choice == JOptionPane.CLOSED_OPTION) return;
+            exportClassified = (choice == 1);
+        }
+
         try {
             org.apache.poi.xssf.usermodel.XSSFWorkbook wb =
                     new org.apache.poi.xssf.usermodel.XSSFWorkbook();
             org.apache.poi.ss.usermodel.Sheet sheet = wb.createSheet("Raw Data");
-            org.apache.poi.ss.usermodel.Row   hr    = sheet.createRow(0);
-            hr.createCell(0).setCellValue("");
-            for (int i = 0; i < matrixModel.attrList.size(); i++)
-                hr.createCell(i+1).setCellValue(matrixModel.attrList.get(i));
-            for (int i = 0; i < matrixModel.objList.size(); i++) {
-                org.apache.poi.ss.usermodel.Row row = sheet.createRow(i+1);
-                String obj = matrixModel.objList.get(i);
-                row.createCell(0).setCellValue(obj);
-                Map<String, Double> ov = continuousValues.get(obj);
-                if (ov != null)
-                    for (int j = 0; j < matrixModel.attrList.size(); j++) {
-                        Double v = ov.get(matrixModel.attrList.get(j));
-                        if (v != null) row.createCell(j+1).setCellValue(v);
-                    }
+
+            // ── Styles ──────────────────────────────────────────────────────
+            // Cache de styles couleur : évite de créer des doublons (limite Excel)
+            java.util.Map<Integer, org.apache.poi.xssf.usermodel.XSSFCellStyle> colorCache =
+                    new java.util.HashMap<Integer, org.apache.poi.xssf.usermodel.XSSFCellStyle>();
+
+            // Style en-tête (gris + gras)
+            org.apache.poi.xssf.usermodel.XSSFCellStyle headerStyle = wb.createCellStyle();
+            headerStyle.setFillForegroundColor(new org.apache.poi.xssf.usermodel.XSSFColor(
+                    new byte[]{ (byte)200, (byte)200, (byte)200 }, null));
+            headerStyle.setFillPattern(
+                    org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+            org.apache.poi.ss.usermodel.Font boldFont = wb.createFont();
+            boldFont.setBold(true);
+            headerStyle.setFont(boldFont);
+
+            // ── Ligne d'en-tête ──────────────────────────────────────────────
+            org.apache.poi.ss.usermodel.Row hr = sheet.createRow(0);
+            org.apache.poi.ss.usermodel.Cell cornerCell = hr.createCell(0);
+            cornerCell.setCellValue("Object / Attribute");
+            cornerCell.setCellStyle(headerStyle);
+            for (int i = 0; i < matrixModel.attrList.size(); i++) {
+                org.apache.poi.ss.usermodel.Cell c = hr.createCell(i + 1);
+                c.setCellValue(matrixModel.attrList.get(i));
+                c.setCellStyle(headerStyle);
             }
+
+            // ── Lignes de données ────────────────────────────────────────────
+            for (int i = 0; i < matrixModel.objList.size(); i++) {
+                org.apache.poi.ss.usermodel.Row row = sheet.createRow(i + 1);
+                String obj = matrixModel.objList.get(i);
+
+                // Cellule nom d'objet (gris + gras)
+                org.apache.poi.ss.usermodel.Cell objCell = row.createCell(0);
+                objCell.setCellValue(obj);
+                objCell.setCellStyle(headerStyle);
+
+                Map<String, Double> ov = continuousValues.get(obj);
+                if (ov == null) continue;
+                for (int j = 0; j < matrixModel.attrList.size(); j++) {
+                    String attr  = matrixModel.attrList.get(j);
+                    Double value = ov.get(attr);
+                    if (value == null) continue;
+
+                    org.apache.poi.ss.usermodel.Cell cell = row.createCell(j + 1);
+                    RawDataConfig cfg = rawDataConfigs.get(attr);
+
+                    // Valeur : brute ou étiquette de classe
+                    if (exportClassified && cfg != null
+                            && (cfg.getMode() == Mode.GEOMETRIC || cfg.getMode() == Mode.UNIFORME)) {
+                        int cls;
+                        String prefix;
+                        if (cfg.getMode() == Mode.GEOMETRIC) {
+                            cls    = GeometricScale.classifyValue(value,
+                                    cfg.getMin(), cfg.getMax(), cfg.getNumberOfClasses());
+                            prefix = "C";
+                        } else {
+                            cls    = UniformScale.classifyValue(value,
+                                    cfg.getMin(), cfg.getMax(), cfg.getNumberOfClasses());
+                            prefix = "U";
+                        }
+                        cell.setCellValue(cls > 0
+                            ? prefix + cls + " (" + value + ")"
+                            : "? (" + value + ")");
+                    } else {
+                        cell.setCellValue(value);
+                    }
+
+                    // Couleur de fond (identique à l'affichage UI)
+                    Color bg = computeCellBgColor(value, cfg);
+                    if (bg != null) {
+                        cell.setCellStyle(getOrCreatePoiColorStyle(wb, bg, colorCache));
+                    }
+                }
+            }
+
+            // ── Finalisation ─────────────────────────────────────────────────
             for (int i = 0; i <= matrixModel.attrList.size(); i++) sheet.autoSizeColumn(i);
             java.io.FileOutputStream fos = new java.io.FileOutputStream(file);
             wb.write(fos); fos.close(); wb.close();
             JOptionPane.showMessageDialog(this,
-                    "Export réussi !\n" + file.getAbsolutePath(),
+                    "Export réussi !\n" + file.getAbsolutePath() +
+                    "\n\nNote : le fichier peut être réimporté tel quel\n" +
+                    "(seules les valeurs numériques brutes sont lues à l'import).",
                     "Export Terminé", JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "Échec :\n" + ex.getMessage(),
                     "Erreur Export", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    /**
+     * Retourne (ou crée et met en cache) un XSSFCellStyle avec la couleur donnée.
+     * Le cache évite de dépasser la limite de styles Excel (~64 000).
+     */
+    private org.apache.poi.xssf.usermodel.XSSFCellStyle getOrCreatePoiColorStyle(
+            org.apache.poi.xssf.usermodel.XSSFWorkbook wb,
+            Color color,
+            java.util.Map<Integer, org.apache.poi.xssf.usermodel.XSSFCellStyle> cache) {
+        int key = color.getRGB();
+        if (cache.containsKey(key)) return cache.get(key);
+        org.apache.poi.xssf.usermodel.XSSFCellStyle style = wb.createCellStyle();
+        style.setFillForegroundColor(new org.apache.poi.xssf.usermodel.XSSFColor(
+                new byte[]{ (byte)color.getRed(), (byte)color.getGreen(), (byte)color.getBlue() }, null));
+        style.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+        cache.put(key, style);
+        return style;
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -1284,6 +1505,39 @@ public class RawDataView extends View {
     // Utilitaire : min/max auto-détecté dans la matrice continue
     // ═════════════════════════════════════════════════════════════════════════
 
+    /**
+     * Calcule la couleur de fond d'une cellule de valeur continue.
+     * Utilisé à la fois par MatrixCellRenderer et par l'export Excel
+     * pour garantir que l'export reflète exactement l'affichage UI.
+     * Respecte cfg.isInvertColors().
+     */
+    private Color computeCellBgColor(Double value, RawDataConfig cfg) {
+        if (value == null || cfg == null) return null;
+        int n = cfg.getNumberOfClasses();
+        switch (cfg.getMode()) {
+            case GEOMETRIC: {
+                if (cfg.validateGeometric() != null) return null;
+                int cls = GeometricScale.classifyValue(value, cfg.getMin(), cfg.getMax(), n);
+                if (cls <= 0) return new Color(255, 240, 200);
+                int d = cfg.isInvertColors() ? (n - cls + 1) : cls;
+                return getClassColor(d, n);
+            }
+            case UNIFORME: {
+                if (cfg.validateUniform() != null) return null;
+                int cls = UniformScale.classifyValue(value, cfg.getMin(), cfg.getMax(), n);
+                if (cls <= 0) return new Color(255, 240, 200);
+                int d = cfg.isInvertColors() ? (n - cls + 1) : cls;
+                return getClassColor(d, n);
+            }
+            case THRESHOLD:
+            case MIN_MAX:
+            case OTHER:
+                return cfg.shouldBeChecked(value) ? COLOR_ABOVE : COLOR_BELOW;
+            default:
+                return null;
+        }
+    }
+
     private double[] computeMinMaxForAttr(String attr) {
         double min = Double.MAX_VALUE;
         double max = -Double.MAX_VALUE;
@@ -1296,6 +1550,8 @@ public class RawDataView extends View {
                 hasValues = true;
             }
         }
+        // Seule contrainte : min < max (valeurs nulles/négatives acceptées
+        // car GeometricScale gère le décalage automatiquement).
         if (!hasValues || min >= max) return null;
         return new double[]{ min, max };
     }
@@ -1376,6 +1632,12 @@ public class RawDataView extends View {
             super.getTableCellRendererComponent(t, v, sel, foc, row, col);
             setHorizontalAlignment(col == 0 ? SwingConstants.LEFT : SwingConstants.CENTER);
             if (col == 0) {
+                String attrName = (v != null ? v.toString() : "");
+                RawDataConfig cfg2 = rawDataConfigs.get(attrName);
+                boolean inv = (cfg2 != null && cfg2.isInvertColors());
+                setText(inv ? "[↑↓] " + attrName : attrName);
+                if (inv) setToolTipText("Couleurs inversées — clic droit pour rétablir");
+                else     setToolTipText("Clic droit pour inverser les couleurs");
                 setBackground(COLOR_HEADER);
                 setFont(getFont().deriveFont(Font.BOLD));
             } else if (!t.isCellEditable(row, col)) {
@@ -1473,7 +1735,9 @@ public class RawDataView extends View {
                             int cls = GeometricScale.classifyValue(
                                     (Double) value, cfg.getMin(), cfg.getMax(), cfg.getNumberOfClasses());
                             if (cls > 0) {
-                                setBackground(new Color(200 + (cls*10)%55, 220, 255));
+                                int n = cfg.getNumberOfClasses();
+                                int displayCls = cfg.isInvertColors() ? (n - cls + 1) : cls;
+                                setBackground(getClassColor(displayCls, n));
                                 setText("C" + cls + " (" + display + ")");
                             } else {
                                 setBackground(new Color(255, 240, 200));
@@ -1488,8 +1752,9 @@ public class RawDataView extends View {
                             int cls = UniformScale.classifyValue(
                                     (Double) value, cfg.getMin(), cfg.getMax(), cfg.getNumberOfClasses());
                             if (cls > 0) {
-                                // Teinte violacée pour distinguer de GEOMETRIC (bleu)
-                                setBackground(new Color(220 + (cls*8)%35, 200, 255));
+                                int n = cfg.getNumberOfClasses();
+                                int displayCls = cfg.isInvertColors() ? (n - cls + 1) : cls;
+                                setBackground(getClassColor(displayCls, n));
                                 setText("U" + cls + " (" + display + ")");
                             } else {
                                 setBackground(new Color(255, 240, 200));
@@ -1499,6 +1764,8 @@ public class RawDataView extends View {
                             setBackground(COLOR_EMPTY);
                         }
                     } else {
+                        // THRESHOLD / MIN_MAX / OTHER
+                        // shouldBeChecked() respecte déjà invertColors
                         setBackground(cfg.shouldBeChecked((Double) value)
                                 ? COLOR_ABOVE : COLOR_BELOW);
                     }

@@ -26,6 +26,7 @@ public class RawDataConfig {
     private double max;
     private double threshold;
     private int    numberOfClasses = 3;
+    private boolean invertColors   = false;   // true = inverser le gradient / la logique booléenne
 
     public RawDataConfig(String attributeName) {
         this.attributeName   = attributeName;
@@ -44,6 +45,7 @@ public class RawDataConfig {
     public double getMax()             { return max; }
     public double getThreshold()       { return threshold; }
     public int    getNumberOfClasses() { return numberOfClasses; }
+    public boolean isInvertColors()    { return invertColors; }
 
     // ── Setters ──────────────────────────────────────────────────────────────
 
@@ -53,6 +55,7 @@ public class RawDataConfig {
     public void setMax(double max)         { this.max = max; }
     public void setThreshold(double t)     { this.threshold = t; }
     public void setNumberOfClasses(int n)  { this.numberOfClasses = Math.max(2, n); }
+    public void setInvertColors(boolean v) { this.invertColors = v; }
 
     // ── Mode-specific field editability ─────────────────────────────────────
 
@@ -93,12 +96,19 @@ public class RawDataConfig {
      */
     public boolean shouldBeChecked(double value) {
         switch (mode) {
-            case THRESHOLD: return value >= threshold;
-            case MIN_MAX:   return value >= min && value <= max;
+            case THRESHOLD:
+                // Inverted : valeur EN DESSOUS du seuil → coché (le bas est le "bien")
+                return invertColors ? (value < threshold) : (value >= threshold);
+            case MIN_MAX:
+                boolean inside = value >= min && value <= max;
+                // Inverted : être HORS de l'intervalle → coché
+                return invertColors ? !inside : inside;
             case GEOMETRIC: return false; // géré par applyGeometricAttribute()
             case UNIFORME:  return false; // géré par applyUniformAttribute()
-            case OTHER:     return value >= threshold;
-            default:        return value >= threshold;
+            case OTHER:
+                return invertColors ? (value < threshold) : (value >= threshold);
+            default:
+                return value >= threshold;
         }
     }
 
@@ -106,16 +116,19 @@ public class RawDataConfig {
 
     /**
      * Valide la configuration pour le mode GEOMETRIC.
+     * Depuis l'introduction du décalage automatique dans GeometricScale,
+     * les valeurs nulles ou négatives sont acceptées.
+     * Seule la relation min < max est requise.
+     *
      * @return message d'erreur, ou null si valide.
      */
     public String validateGeometric() {
-        if (min <= 0 || max <= 0)
-            return "Min et Max doivent être strictement positifs (>0) pour la suite géométrique.";
         if (min >= max)
             return "Min doit être strictement inférieur à Max.";
         if (numberOfClasses < 2)
             return "Le nombre de classes doit être au moins 2.";
         return null;
+        // Note : valeurs nulles/négatives gérées par décalage dans GeometricScale.
     }
 
     /**
